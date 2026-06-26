@@ -96,6 +96,19 @@ internal static class WinDivertNative
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool WinDivertSend(nint handle, byte[] packet, uint packetLen, out uint writeLen, ref Address address);
 
+    /// <summary>Batched receive: fills the buffer with multiple packets and the
+    /// matching address array. <paramref name="addrLen"/> is in bytes (count * sizeof(Address)).</summary>
+    [DllImport(Dll, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool WinDivertRecvEx(nint handle, byte[] packet, uint packetLen, out uint readLen,
+        ulong flags, [In, Out] Address[] address, ref uint addrLen, nint overlapped);
+
+    /// <summary>Batched send of multiple packets with their address array.</summary>
+    [DllImport(Dll, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool WinDivertSendEx(nint handle, byte[] packet, uint packetLen, out uint writeLen,
+        ulong flags, [In] Address[] address, uint addrLen, nint overlapped);
+
     [DllImport(Dll, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool WinDivertClose(nint handle);

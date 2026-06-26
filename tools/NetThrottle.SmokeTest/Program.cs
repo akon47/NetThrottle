@@ -72,19 +72,15 @@ Thread.Sleep(800);
 double sniff = RunLoopbackTransfer(TransferBytes);
 W($"2) Engine ON, no limits (sniff):     {sniff,7:0.0} MB/s");
 
-engine.ApplyRules(new[]
+var rule = new ThrottleRule
 {
-    new ThrottleRule
-    {
-        Enabled = true,
-        ProcessName = me,
-        Protocol = ProtocolKind.Both,
-        DownloadBytesPerSec = CapBytesPerSec,
-        UploadBytesPerSec = CapBytesPerSec,
-    },
-}); // a limit appears -> engine switches to divert mode
-Thread.Sleep(800);
-double throttled = RunLoopbackTransfer(TransferBytes);
+    Enabled = true,
+    ProcessName = me,
+    Protocol = ProtocolKind.Both,
+    DownloadBytesPerSec = CapBytesPerSec,
+    UploadBytesPerSec = CapBytesPerSec,
+};
+double throttled = RunThrottledTransfer(engine, rule, TransferBytes);
 W($"3) Engine ON, {capMBs:0.#} MB/s cap (divert): {throttled,7:0.0} MB/s");
 
 engine.Stop();
@@ -121,6 +117,50 @@ static double RunLoopbackTransfer(long bytes)
     using var client = new TcpClient();
     client.Connect(IPAddress.Loopback, port);
     using NetworkStream cs = client.GetStream();
+
+    var data = new byte[256 * 1024];
+    var sw = Stopwatch.StartNew();
+    long sent = 0;
+    while (sent < bytes)
+    {
+        int chunk = (int)Math.Min(data.Length, bytes - sent);
+        cs.Write(data, 0, chunk);
+        sent += chunk;
+    }
+    cs.Flush();
+    client.Client.Shutdown(SocketShutdown.Send);
+    server.Wait();
+    sw.Stop();
+    listener.Stop();
+
+    return bytes / 1048576.0 / sw.Elapsed.TotalSeconds;
+}
+
+// Like RunLoopbackTransfer, but switches the engine to divert mode on an already
+// established connection and warms it up so the port→process map attributes it
+// before timing (loopback is fast enough to otherwise finish during the lookup gap).
+static double RunThrottledTransfer(PacketEngine engine, ThrottleRule rule, long bytes)
+{
+    var listener = new TcpListener(IPAddress.Loopback, 0);
+    listener.Start();
+    int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+    var server = Task.Run(() =>
+    {
+        using TcpClient s = listener.AcceptTcpClient();
+        using NetworkStream ns = s.GetStream();
+        var buf = new byte[256 * 1024];
+        while (ns.Read(buf, 0, buf.Length) > 0) { }
+    });
+
+    using var client = new TcpClient();
+    client.Connect(IPAddress.Loopback, port);
+    using NetworkStream cs = client.GetStream();
+
+    engine.ApplyRules(new[] { rule }); // a limit appears -> divert mode
+    var warm = new byte[256 * 1024];
+    for (int i = 0; i < 8; i++) cs.Write(warm, 0, warm.Length); // ~2 MB warmup
+    Thread.Sleep(1200); // let the port map refresh and attribute this connection
 
     var data = new byte[256 * 1024];
     var sw = Stopwatch.StartNew();

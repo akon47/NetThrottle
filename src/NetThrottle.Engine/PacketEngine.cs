@@ -28,6 +28,7 @@ public sealed class PacketEngine : IDisposable
     private const string Filter = "tcp or udp";
 
     private static readonly IEqualityComparer<(string Process, Direction Direction)> KeyCmp = new ProcessDirectionComparer();
+    private static readonly int AddressSize = Marshal.SizeOf<WinDivertNative.Address>();
 
     private readonly object _gate = new();
     private readonly ProcessPortMap _portMap = new();
@@ -179,15 +180,56 @@ public sealed class PacketEngine : IDisposable
 
     private void PumpLoop(nint handle, bool divert)
     {
-        var packet = new byte[65535];
-        var addr = new WinDivertNative.Address();
+        const int bufferSize = 262144; // 256 KB holds many packets per syscall
+        const int maxPackets = 255;    // WinDivert batch limit
+
+        var buffer = new byte[bufferSize];
+        var addrs = new WinDivertNative.Address[maxPackets];
+        byte[]? sendBuffer = divert ? new byte[bufferSize] : null;
+        var sendAddrs = divert ? new WinDivertNative.Address[maxPackets] : null;
+
         try
         {
             while (true)
             {
-                if (!WinDivertNative.WinDivertRecv(handle, packet, (uint)packet.Length, out uint len, ref addr))
+                uint addrLen = (uint)(addrs.Length * AddressSize);
+                if (!WinDivertNative.WinDivertRecvEx(handle, buffer, (uint)buffer.Length, out uint recvLen,
+                        0, addrs, ref addrLen, nint.Zero))
                     break; // handle closed (mode switch / stop) or a fatal error
-                ReleasePacket(packet, len, addr, divert, handle);
+
+                int count = (int)(addrLen / (uint)AddressSize);
+                int offset = 0, sendBytes = 0, sendCount = 0;
+
+                for (int i = 0; i < count && offset < recvLen; i++)
+                {
+                    int plen = PacketParser.TotalLength(buffer.AsSpan(offset, (int)recvLen - offset));
+                    if (plen <= 0 || offset + plen > recvLen) break;
+
+                    TimeSpan delay = Process(buffer.AsSpan(offset, plen), addrs[i], divert);
+
+                    if (divert)
+                    {
+                        if (delay <= TimeSpan.Zero)
+                        {
+                            // Re-inject immediately as part of one batched send.
+                            Array.Copy(buffer, offset, sendBuffer!, sendBytes, plen);
+                            sendAddrs![sendCount++] = addrs[i];
+                            sendBytes += plen;
+                        }
+                        else
+                        {
+                            ScheduleSend(handle, buffer.AsSpan(offset, plen).ToArray(), (uint)plen, addrs[i], delay);
+                        }
+                    }
+
+                    offset += plen;
+                }
+
+                // Sniff mode only observes copies — the originals were never removed,
+                // so nothing is sent back there.
+                if (divert && sendCount > 0)
+                    WinDivertNative.WinDivertSendEx(handle, sendBuffer!, (uint)sendBytes, out _,
+                        0, sendAddrs!, (uint)(sendCount * AddressSize), nint.Zero);
             }
         }
         catch (Exception ex) when (_running && !_closing)
@@ -197,37 +239,28 @@ public sealed class PacketEngine : IDisposable
         }
     }
 
-    private void ReleasePacket(byte[] packet, uint len, WinDivertNative.Address addr, bool divert, nint handle)
+    private TimeSpan Process(ReadOnlySpan<byte> packet, WinDivertNative.Address addr, bool divert)
     {
-        TimeSpan delay = TimeSpan.Zero;
+        if (!PacketParser.TryParse(packet, out var info))
+            return TimeSpan.Zero;
 
-        if (PacketParser.TryParse(packet, len, out var info))
-        {
-            var direction = addr.IsOutbound ? Direction.Outbound : Direction.Inbound;
-            ushort localPort = addr.IsOutbound ? info.SrcPort : info.DstPort;
-            string? process = _portMap.ResolveProcessName(info.Protocol, localPort);
+        var direction = addr.IsOutbound ? Direction.Outbound : Direction.Inbound;
+        ushort localPort = addr.IsOutbound ? info.SrcPort : info.DstPort;
+        string? process = _portMap.ResolveProcessName(info.Protocol, localPort);
+        if (process is not { Length: > 0 })
+            return TimeSpan.Zero;
 
-            if (process is { Length: > 0 })
-            {
-                var key = (process, direction);
-                _traffic.AddOrUpdate(key, len, (_, v) => v + len);
+        var key = (process, direction);
+        long len = packet.Length;
+        _traffic.AddOrUpdate(key, static (_, l) => l, static (_, v, l) => v + l, len);
 
-                if (divert &&
-                    FindRule(process, info.Protocol) is { } rule &&
-                    rule.LimitsDirection(direction) &&
-                    _buckets.TryGetValue(key, out var bucket))
-                    delay = bucket.Reserve(len);
-            }
-        }
+        if (divert &&
+            FindRule(process, info.Protocol) is { } rule &&
+            rule.LimitsDirection(direction) &&
+            _buckets.TryGetValue(key, out var bucket))
+            return bucket.Reserve(len);
 
-        // Sniff mode only observes a copy — the real packet was never removed,
-        // so we must not re-inject it.
-        if (!divert) return;
-
-        if (delay <= TimeSpan.Zero)
-            SendPacket(handle, packet, len, addr);
-        else
-            ScheduleSend(handle, packet, len, addr, delay);
+        return TimeSpan.Zero;
     }
 
     private ThrottleRule? FindRule(string process, ProtocolKind protocol)

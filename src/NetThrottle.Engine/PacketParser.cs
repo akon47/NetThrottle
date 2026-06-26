@@ -10,10 +10,25 @@ internal static class PacketParser
     private const byte ProtoTcp = 6;
     private const byte ProtoUdp = 17;
 
-    public static bool TryParse(byte[] packet, uint len, out PacketInfo info)
+    /// <summary>
+    /// Total length (bytes) of the IP packet starting at the span, read from the IP
+    /// header, or -1 if it cannot be determined. Used to walk a batched buffer.
+    /// </summary>
+    public static int TotalLength(ReadOnlySpan<byte> buffer)
+    {
+        if (buffer.Length < 4) return -1;
+        int version = buffer[0] >> 4;
+        if (version == 4)
+            return (buffer[2] << 8) | buffer[3];
+        if (version == 6)
+            return buffer.Length < 6 ? -1 : 40 + ((buffer[4] << 8) | buffer[5]);
+        return -1;
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> packet, out PacketInfo info)
     {
         info = default;
-        if (len < 20) return false;
+        if (packet.Length < 20) return false;
 
         int version = packet[0] >> 4;
         int transportOffset;
@@ -22,13 +37,13 @@ internal static class PacketParser
         if (version == 4)
         {
             int ihl = (packet[0] & 0x0F) * 4;
-            if (ihl < 20 || len < ihl + 4) return false;
+            if (ihl < 20 || packet.Length < ihl + 4) return false;
             protocol = packet[9];
             transportOffset = ihl;
         }
         else if (version == 6)
         {
-            if (len < 40 + 4) return false;
+            if (packet.Length < 40 + 4) return false;
             protocol = packet[6];      // Next Header; extension headers are not followed.
             transportOffset = 40;
         }

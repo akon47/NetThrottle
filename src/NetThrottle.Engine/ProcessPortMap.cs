@@ -22,7 +22,7 @@ public sealed class ProcessPortMap
 
     public ProcessPortMap(TimeSpan? refreshInterval = null)
     {
-        _refreshInterval = refreshInterval ?? TimeSpan.FromMilliseconds(500);
+        _refreshInterval = refreshInterval ?? TimeSpan.FromMilliseconds(250);
         Refresh();
     }
 
