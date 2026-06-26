@@ -1,0 +1,95 @@
+name: Release
+
+# Recommended pattern: pushing a version tag (vX.Y.Z) drives the whole release.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  PROJECT: src/NetThrottle.App/NetThrottle.App.csproj
+  WINDIVERT_TAG: v2.2.2
+  WINDIVERT_ZIP: WinDivert-2.2.2-A.zip
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Resolve version from tag
+        shell: pwsh
+        run: |
+          $ver = "${{ github.ref_name }}" -replace '^v', ''
+          if ($ver -notmatch '^\d+\.\d+\.\d+$') { throw "Tag must look like vMAJOR.MINOR.PATCH (got '${{ github.ref_name }}')." }
+          "APP_VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Building NetThrottle $ver"
+
+      - name: Publish (self-contained single file)
+        shell: pwsh
+        run: |
+          dotnet publish $env:PROJECT `
+            -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:DebugType=none `
+            -p:Version=$env:APP_VERSION `
+            -p:AssemblyVersion="$env:APP_VERSION.0" `
+            -p:FileVersion="$env:APP_VERSION.0" `
+            -p:InformationalVersion=$env:APP_VERSION `
+            -o publish
+
+      - name: Fetch WinDivert native files
+        shell: pwsh
+        run: |
+          $url = "https://github.com/basil00/WinDivert/releases/download/$env:WINDIVERT_TAG/$env:WINDIVERT_ZIP"
+          Invoke-WebRequest -Uri $url -OutFile windivert.zip
+          Expand-Archive windivert.zip -DestinationPath windivert
+          $dll = Get-ChildItem windivert -Recurse -Filter WinDivert.dll   | Where-Object FullName -match '\\x64\\' | Select-Object -First 1
+          $sys = Get-ChildItem windivert -Recurse -Filter WinDivert64.sys | Select-Object -First 1
+          if (-not $dll -or -not $sys) { throw "Could not locate WinDivert x64 binaries in the archive." }
+          Copy-Item $dll.FullName publish/WinDivert.dll -Force
+          Copy-Item $sys.FullName publish/WinDivert64.sys -Force
+          Get-ChildItem publish | Select-Object Name, Length
+
+      - name: Build portable zip
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          New-Item -ItemType Directory -Force staging/NetThrottle | Out-Null
+          Copy-Item publish/* staging/NetThrottle/ -Recurse -Force
+          # Marker => portable mode: settings.json is written next to the exe.
+          "NetThrottle portable build. Settings are stored next to NetThrottle.exe." |
+            Out-File staging/NetThrottle/portable.marker -Encoding utf8
+          Compress-Archive -Path staging/NetThrottle -DestinationPath "dist/NetThrottle_v${env:APP_VERSION}_Portable.zip" -Force
+
+      - name: Build installer (NSIS)
+        shell: pwsh
+        run: |
+          choco install nsis -y --no-progress
+          $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
+          Push-Location installers
+          & $makensis "/DVERSION=$env:APP_VERSION" "/DSRC_DIR=..\publish" "/DOUT_DIR=..\dist" Setup.nsi
+          Pop-Location
+          if ($LASTEXITCODE -ne 0) { throw "makensis failed with exit code $LASTEXITCODE" }
+          Get-ChildItem dist | Select-Object Name, Length
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: NetThrottle ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/NetThrottle_v${{ env.APP_VERSION }}_Setup.exe
+            dist/NetThrottle_v${{ env.APP_VERSION }}_Portable.zip

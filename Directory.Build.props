@@ -1,0 +1,14 @@
+<Project>
+  <!-- Shared metadata for every project in the solution. Per-project versions
+       are overridden by CI (-p:Version) from the git tag. -->
+  <PropertyGroup>
+    <Authors>Kim, Hwan</Authors>
+    <Company>akon47</Company>
+    <Product>NetThrottle</Product>
+    <Copyright>Copyright (c) 2026 Kim, Hwan</Copyright>
+    <NeutralLanguage>en</NeutralLanguage>
+    <LangVersion>latest</LangVersion>
+    <RepositoryUrl>https://github.com/akon47/NetThrottle</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+</Project>

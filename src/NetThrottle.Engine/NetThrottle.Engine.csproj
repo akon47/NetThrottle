@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Platforms>x64</Platforms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NetThrottle.Core\NetThrottle.Core.csproj" />
+  </ItemGroup>
+
+  <!--
+    WinDivert native files (WinDivert.dll / WinDivert64.sys) must sit next to the
+    executable. Drop them under native/x64/ and they will be copied to the output.
+    Download from https://github.com/basil00/WinDivert/releases (v2.2.x).
+  -->
+  <ItemGroup>
+    <None Include="native\x64\**\*" Condition="Exists('native\x64')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>%(Filename)%(Extension)</Link>
+    </None>
+  </ItemGroup>
+
+</Project>

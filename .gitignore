@@ -1,0 +1,35 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+[Rr]elease/
+[Dd]ebug/
+publish/
+dist/
+staging/
+windivert/
+
+# WinDivert native binaries are downloaded at build time, never committed
+**/native/x64/
+*.sys
+WinDivert.dll
+windivert.zip
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo
+*.userprefs
+*_i.c
+*_p.c
+
+# Test / coverage
+[Tt]est[Rr]esults/
+*.coverage
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Local settings produced by the app itself
+settings.json
