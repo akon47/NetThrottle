@@ -1,17 +1,19 @@
+using NetThrottle.App.Common;
 using NetThrottle.Core.Models;
 
 namespace NetThrottle.App.ViewModels;
 
 /// <summary>
 /// Editable wrapper around a <see cref="ThrottleRule"/>. Limits are surfaced in
-/// KB/s for the UI (0 = unlimited); live rates are pushed in by the host.
+/// the app's current rate unit (KB/s or MB/s; 0 = unlimited); live rates are
+/// pushed in by the host as both a formatted string and a numeric value (for sorting).
 /// </summary>
 public sealed class RuleViewModel : ViewModelBase
 {
-    public const double BytesPerKilobyte = 1024d;
-
     private string _currentDownload = "—";
     private string _currentUpload = "—";
+    private double _currentDownloadBps;
+    private double _currentUploadBps;
     private bool _isRunning;
 
     public RuleViewModel(ThrottleRule model) => Model = model;
@@ -58,24 +60,24 @@ public sealed class RuleViewModel : ViewModelBase
         set { if (Model.Protocol != value) { Model.Protocol = value; OnPropertyChanged(); RaiseChanged(); } }
     }
 
-    /// <summary>Download cap in KB/s. 0 = unlimited.</summary>
-    public double DownloadKBps
+    /// <summary>Download cap in the current display unit. 0 = unlimited.</summary>
+    public double DownloadLimit
     {
-        get => Model.DownloadBytesPerSec / BytesPerKilobyte;
+        get => Model.DownloadBytesPerSec / DisplayUnits.Instance.BytesPerUnit;
         set
         {
-            long bytes = (long)Math.Max(0, value * BytesPerKilobyte);
+            long bytes = (long)Math.Max(0, value * DisplayUnits.Instance.BytesPerUnit);
             if (Model.DownloadBytesPerSec != bytes) { Model.DownloadBytesPerSec = bytes; OnPropertyChanged(); OnPropertyChanged(nameof(HasLimit)); RaiseChanged(); }
         }
     }
 
-    /// <summary>Upload cap in KB/s. 0 = unlimited.</summary>
-    public double UploadKBps
+    /// <summary>Upload cap in the current display unit. 0 = unlimited.</summary>
+    public double UploadLimit
     {
-        get => Model.UploadBytesPerSec / BytesPerKilobyte;
+        get => Model.UploadBytesPerSec / DisplayUnits.Instance.BytesPerUnit;
         set
         {
-            long bytes = (long)Math.Max(0, value * BytesPerKilobyte);
+            long bytes = (long)Math.Max(0, value * DisplayUnits.Instance.BytesPerUnit);
             if (Model.UploadBytesPerSec != bytes) { Model.UploadBytesPerSec = bytes; OnPropertyChanged(); OnPropertyChanged(nameof(HasLimit)); RaiseChanged(); }
         }
     }
@@ -90,6 +92,26 @@ public sealed class RuleViewModel : ViewModelBase
     {
         get => _currentUpload;
         set => SetProperty(ref _currentUpload, value);
+    }
+
+    /// <summary>Live download rate in bytes/sec — the numeric sort key for the column.</summary>
+    public double CurrentDownloadBps
+    {
+        get => _currentDownloadBps;
+        set => SetProperty(ref _currentDownloadBps, value);
+    }
+
+    public double CurrentUploadBps
+    {
+        get => _currentUploadBps;
+        set => SetProperty(ref _currentUploadBps, value);
+    }
+
+    /// <summary>Re-reads the cap values when the display unit changes.</summary>
+    public void NotifyUnitChanged()
+    {
+        OnPropertyChanged(nameof(DownloadLimit));
+        OnPropertyChanged(nameof(UploadLimit));
     }
 
     private void RaiseChanged() => Changed?.Invoke();

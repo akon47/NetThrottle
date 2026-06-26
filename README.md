@@ -20,8 +20,9 @@ A Windows desktop app that rate-limits per-process network bandwidth, with separ
 - Live total up/down readout and a "limited only" filter.
 - Closing the window minimizes to the notification tray; throttling keeps running in the background.
 - Multi-language UI that follows the OS language (English & Korean included). Add a language by dropping a JSON file into the `locales/` folder next to the executable.
-- Settings live in a dedicated dialog, ready to grow.
-- Clean WPF UI on .NET 9 with a dark theme and a filterable process grid.
+- Settings live in a dedicated dialog: language, **start with Windows** (elevated scheduled task), **start minimized to the tray**, and a **KB/s ⇄ MB/s** unit toggle.
+- Sort any column (e.g. by live usage to find bandwidth hogs); the window remembers its size and position.
+- Clean WPF UI on .NET 9 with a custom dark title bar and a filterable process grid.
 - Installer and portable distributions, with automatic update notifications from GitHub Releases.
 
 ## How it works

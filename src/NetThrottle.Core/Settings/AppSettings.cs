@@ -14,5 +14,18 @@ public sealed class AppSettings
     /// <summary>Selected UI language code (locale file name, e.g. "en", "ko"). Null = follow the OS.</summary>
     public string? Language { get; set; }
 
+    /// <summary>Show limits in MB/s instead of KB/s.</summary>
+    public bool UnitMegabytes { get; set; }
+
+    /// <summary>Start hidden in the tray instead of showing the window.</summary>
+    public bool StartMinimized { get; set; }
+
+    // Remembered window placement (normal-state bounds + maximized flag).
+    public double? WindowLeft { get; set; }
+    public double? WindowTop { get; set; }
+    public double? WindowWidth { get; set; }
+    public double? WindowHeight { get; set; }
+    public bool WindowMaximized { get; set; }
+
     public List<ThrottleRule> Rules { get; set; } = new();
 }

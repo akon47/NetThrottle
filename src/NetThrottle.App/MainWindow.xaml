@@ -7,8 +7,10 @@
         xmlns:conv="clr-namespace:NetThrottle.App.Converters"
         xmlns:loc="clr-namespace:NetThrottle.App.Localization"
         xmlns:ctrl="clr-namespace:NetThrottle.App.Controls"
+        xmlns:common="clr-namespace:NetThrottle.App.Common"
         mc:Ignorable="d"
         Title="NetThrottle" Height="600" Width="1020" MinWidth="860" MinHeight="440"
+        WindowStartupLocation="CenterScreen"
         FontSize="13" Background="#FF1E1E1F" Icon="/icon.ico"
         TextOptions.TextFormattingMode="Ideal"
         d:DataContext="{d:DesignInstance vm:MainViewModel}">
@@ -126,7 +128,7 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <DataGridTemplateColumn Header="{loc:Tr Col.Protocol}" Width="104">
+                <DataGridTemplateColumn Header="{loc:Tr Col.Protocol}" Width="104" SortMemberPath="Protocol">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <ComboBox Margin="2" Height="26"
@@ -136,17 +138,17 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <DataGridTextColumn Width="128"
-                                    Binding="{Binding DownloadKBps, UpdateSourceTrigger=LostFocus, StringFormat=0.#}">
+                <DataGridTextColumn Width="128" SortMemberPath="DownloadLimit"
+                                    Binding="{Binding DownloadLimit, UpdateSourceTrigger=LostFocus, StringFormat=0.#}">
                     <DataGridTextColumn.Header>
                         <StackPanel Orientation="Horizontal" ToolTip="{loc:Tr Tooltip.DownLimit}">
                             <Path Data="{StaticResource DownArrowGeometry}" Fill="{StaticResource DownArrowBrush}"
                                   Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,5,0" />
-                            <TextBlock Text="{loc:Tr Col.DownKBps}" VerticalAlignment="Center" />
+                            <TextBlock VerticalAlignment="Center"><Run Text="{loc:Tr Col.Down}" /><Run Text=" " /><Run Text="{Binding Label, Source={x:Static common:DisplayUnits.Instance}, Mode=OneWay}" /></TextBlock>
                         </StackPanel>
                     </DataGridTextColumn.Header>
                 </DataGridTextColumn>
-                <DataGridTextColumn Width="88" IsReadOnly="True" Binding="{Binding CurrentDownload}">
+                <DataGridTextColumn Width="88" IsReadOnly="True" SortMemberPath="CurrentDownloadBps" Binding="{Binding CurrentDownload}">
                     <DataGridTextColumn.Header>
                         <StackPanel Orientation="Horizontal" ToolTip="{loc:Tr Tooltip.DownLive}">
                             <Path Data="{StaticResource DownArrowGeometry}" Fill="{StaticResource DownArrowBrush}"
@@ -155,17 +157,17 @@
                         </StackPanel>
                     </DataGridTextColumn.Header>
                 </DataGridTextColumn>
-                <DataGridTextColumn Width="128"
-                                    Binding="{Binding UploadKBps, UpdateSourceTrigger=LostFocus, StringFormat=0.#}">
+                <DataGridTextColumn Width="128" SortMemberPath="UploadLimit"
+                                    Binding="{Binding UploadLimit, UpdateSourceTrigger=LostFocus, StringFormat=0.#}">
                     <DataGridTextColumn.Header>
                         <StackPanel Orientation="Horizontal" ToolTip="{loc:Tr Tooltip.UpLimit}">
                             <Path Data="{StaticResource UpArrowGeometry}" Fill="{StaticResource UpArrowBrush}"
                                   Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,5,0" />
-                            <TextBlock Text="{loc:Tr Col.UpKBps}" VerticalAlignment="Center" />
+                            <TextBlock VerticalAlignment="Center"><Run Text="{loc:Tr Col.Up}" /><Run Text=" " /><Run Text="{Binding Label, Source={x:Static common:DisplayUnits.Instance}, Mode=OneWay}" /></TextBlock>
                         </StackPanel>
                     </DataGridTextColumn.Header>
                 </DataGridTextColumn>
-                <DataGridTextColumn Width="88" IsReadOnly="True" Binding="{Binding CurrentUpload}">
+                <DataGridTextColumn Width="88" IsReadOnly="True" SortMemberPath="CurrentUploadBps" Binding="{Binding CurrentUpload}">
                     <DataGridTextColumn.Header>
                         <StackPanel Orientation="Horizontal" ToolTip="{loc:Tr Tooltip.UpLive}">
                             <Path Data="{StaticResource UpArrowGeometry}" Fill="{StaticResource UpArrowBrush}"

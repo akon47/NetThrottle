@@ -28,11 +28,9 @@
         <StackPanel Margin="18">
             <TextBlock Text="{loc:Tr Settings.General}" FontWeight="SemiBold"
                        Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12" />
-
-            <!-- Add future settings as new rows in this panel. -->
-            <Grid Margin="0,0,0,8">
+            <Grid Margin="0,0,0,18">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="130" />
+                    <ColumnDefinition Width="140" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="{loc:Tr Settings.Language}" VerticalAlignment="Center" />
@@ -45,6 +43,15 @@
                     </ComboBox.ItemTemplate>
                 </ComboBox>
             </Grid>
+
+            <TextBlock Text="{loc:Tr Settings.Startup}" FontWeight="SemiBold"
+                       Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12" />
+            <CheckBox Content="{loc:Tr Settings.RunAtStartup}" IsChecked="{Binding RunAtStartup}" Margin="0,0,0,10" />
+            <CheckBox Content="{loc:Tr Settings.StartMinimized}" IsChecked="{Binding StartMinimized}" Margin="0,0,0,18" />
+
+            <TextBlock Text="{loc:Tr Settings.Display}" FontWeight="SemiBold"
+                       Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12" />
+            <CheckBox Content="{loc:Tr Settings.UseMegabytes}" IsChecked="{Binding UseMegabytes}" Margin="0,0,0,4" />
         </StackPanel>
     </DockPanel>
 </ctrl:ThemedWindow>

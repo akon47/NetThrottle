@@ -23,6 +23,7 @@ public partial class App : Application
     private Mutex? _instanceMutex;
     private EngineController? _engine;
     private MainViewModel? _viewModel;
+    private SettingsService? _settings;
     private TaskbarIcon? _tray;
     private bool _exiting;
     private bool _trayHintShown;
@@ -45,7 +46,8 @@ public partial class App : Application
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
         _engine = new EngineController();
-        var settings = new SettingsService();
+        _settings = new SettingsService();
+        var settings = _settings;
         LocalizationService.Instance.Initialize(
             Path.Combine(AppContext.BaseDirectory, "locales"), settings.Current.Language);
         var processes = new ProcessListProvider();
@@ -59,11 +61,49 @@ public partial class App : Application
             MessageBox.Show(window, message, "NetThrottle", MessageBoxButton.OK, MessageBoxImage.Information));
         _viewModel.ShutdownRequested += () => window.Dispatcher.Invoke(ExitApplication);
         MainWindow = window;
+        RestoreWindowPlacement(window, settings.Current);
 
         CreateTrayIcon();
-        window.Show();
+        if (!settings.Current.StartMinimized)
+            window.Show();
 
         _ = _viewModel.CheckForUpdatesAsync(silent: true);
+    }
+
+    private static void RestoreWindowPlacement(Window window, NetThrottle.Core.Settings.AppSettings s)
+    {
+        if (s.WindowWidth is > 0 && s.WindowHeight is > 0 && s.WindowLeft is { } left && s.WindowTop is { } top)
+        {
+            double vsL = SystemParameters.VirtualScreenLeft, vsT = SystemParameters.VirtualScreenTop;
+            double vsR = vsL + SystemParameters.VirtualScreenWidth, vsB = vsT + SystemParameters.VirtualScreenHeight;
+            // Keep the window on a screen (guards against unplugged monitors).
+            if (left + 80 < vsR && top + 40 < vsB && left + s.WindowWidth.Value > vsL && top + s.WindowHeight.Value > vsT)
+            {
+                window.WindowStartupLocation = WindowStartupLocation.Manual;
+                window.Left = left;
+                window.Top = top;
+                window.Width = s.WindowWidth.Value;
+                window.Height = s.WindowHeight.Value;
+            }
+        }
+        if (s.WindowMaximized)
+            window.WindowState = WindowState.Maximized;
+    }
+
+    private void SaveWindowPlacement(Window window)
+    {
+        if (_settings is null) return;
+        var s = _settings.Current;
+        var bounds = window.RestoreBounds; // normal-state bounds, even while maximized
+        if (!bounds.IsEmpty)
+        {
+            s.WindowLeft = bounds.Left;
+            s.WindowTop = bounds.Top;
+            s.WindowWidth = bounds.Width;
+            s.WindowHeight = bounds.Height;
+        }
+        s.WindowMaximized = window.WindowState == WindowState.Maximized;
+        _settings.Save();
     }
 
     private void CreateTrayIcon()
@@ -108,6 +148,7 @@ public partial class App : Application
 
         // Hide to tray instead of exiting.
         e.Cancel = true;
+        SaveWindowPlacement(window);
         window.Hide();
 
         if (!_trayHintShown)
@@ -142,6 +183,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        if (MainWindow is { } window) SaveWindowPlacement(window);
         _viewModel?.Shutdown();
         _engine?.Dispose();
         _tray?.Dispose();

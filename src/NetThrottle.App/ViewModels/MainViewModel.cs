@@ -54,6 +54,7 @@ public sealed class MainViewModel : ViewModelBase
         _updates = updates;
         _engine.Faulted += OnEngineFaulted;
         _loc.LanguageChanged += OnLanguageChanged;
+        DisplayUnits.Instance.UseMegabytes = _settings.Current.UnitMegabytes;
 
         Entries = new ObservableCollection<RuleViewModel>();
         EntriesView = CollectionViewSource.GetDefaultView(Entries);
@@ -152,6 +153,41 @@ public sealed class MainViewModel : ViewModelBase
         set { if (SetProperty(ref _showOnlyLimited, value)) EntriesView.Refresh(); }
     }
 
+    /// <summary>Display limits in MB/s instead of KB/s (settings dialog).</summary>
+    public bool UseMegabytes
+    {
+        get => DisplayUnits.Instance.UseMegabytes;
+        set
+        {
+            if (DisplayUnits.Instance.UseMegabytes == value) return;
+            DisplayUnits.Instance.UseMegabytes = value;
+            _settings.Current.UnitMegabytes = value;
+            _settings.Save();
+            foreach (var row in Entries) row.NotifyUnitChanged();
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>Start hidden in the tray (settings dialog).</summary>
+    public bool StartMinimized
+    {
+        get => _settings.Current.StartMinimized;
+        set
+        {
+            if (_settings.Current.StartMinimized == value) return;
+            _settings.Current.StartMinimized = value;
+            _settings.Save();
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>Launch at Windows logon via a scheduled task (settings dialog).</summary>
+    public bool RunAtStartup
+    {
+        get => AutoStartService.IsEnabled();
+        set { AutoStartService.Set(value); OnPropertyChanged(); }
+    }
+
     /// <summary>Combined live download rate across all processes.</summary>
     public string TotalDownText
     {
@@ -234,8 +270,8 @@ public sealed class MainViewModel : ViewModelBase
 
     private void ClearLimit(RuleViewModel row)
     {
-        row.DownloadKBps = 0;
-        row.UploadKBps = 0;
+        row.DownloadLimit = 0;
+        row.UploadLimit = 0;
         // A cleared, already-dead row can now leave the list.
         if (!row.IsRunning) RemoveRow(row);
     }
@@ -290,11 +326,17 @@ public sealed class MainViewModel : ViewModelBase
             {
                 row.CurrentDownload = "—";
                 row.CurrentUpload = "—";
+                row.CurrentDownloadBps = 0;
+                row.CurrentUploadBps = 0;
                 continue;
             }
 
-            row.CurrentDownload = ByteFormat.Rate(RateFor(snapshot, row.ProcessName, Direction.Inbound, elapsed));
-            row.CurrentUpload = ByteFormat.Rate(RateFor(snapshot, row.ProcessName, Direction.Outbound, elapsed));
+            double down = RateFor(snapshot, row.ProcessName, Direction.Inbound, elapsed);
+            double up = RateFor(snapshot, row.ProcessName, Direction.Outbound, elapsed);
+            row.CurrentDownload = ByteFormat.Rate(down);
+            row.CurrentUpload = ByteFormat.Rate(up);
+            row.CurrentDownloadBps = down;
+            row.CurrentUploadBps = up;
         }
 
         UpdateTotals(snapshot, elapsed);
