@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Platforms>x64</Platforms>
+    <AssemblyName>NetThrottle.SmokeTest</AssemblyName>
+    <RootNamespace>NetThrottle.SmokeTest</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\NetThrottle.Core\NetThrottle.Core.csproj" />
+    <ProjectReference Include="..\..\src\NetThrottle.Engine\NetThrottle.Engine.csproj" />
+  </ItemGroup>
+
+</Project>

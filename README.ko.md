@@ -79,6 +79,10 @@ WinDivert(네트워크 계층 캡처) → IP Helper(포트 → PID → 이미지
 
 로컬에서 실행하려면 `WinDivert.dll`과 `WinDivert64.sys`(v2.2.x, x64)가 필요합니다. 두 파일을 `src/NetThrottle.Engine/native/x64/`에 넣으면(.csproj가 출력 폴더로 복사) 또는 빌드된 실행 파일과 같은 폴더에 두면 됩니다. 실행은 반드시 **관리자 권한**으로 해야 합니다.
 
+### 엔진 동작 검증
+
+`tools/NetThrottle.SmokeTest`는 헤드리스 종단(end-to-end) 검증 도구입니다. 루프백 TCP 소켓으로 대량 데이터를 (1) 엔진 없이 기준 측정하고 (2) 프로세스 캡을 적용해 다시 측정한 뒤 처리량을 비교합니다. 빌드된 `NetThrottle.SmokeTest.exe` 옆에 WinDivert 파일을 두고 **관리자 권한**으로 실행하면, 통과 시 처리량이 캡 근처로 떨어지는 것을 확인할 수 있습니다(예: 4 MB/s 캡에서 ~5400 MB/s → ~7 MB/s).
+
 ## 릴리스
 
 버전 태그 `vX.Y.Z`를 푸시하면 `.github/workflows/release.yml`(GitHub Actions)이 전체 릴리스를 처리합니다.
@@ -96,6 +100,7 @@ WinDivert(네트워크 계층 캡처) → IP Helper(포트 → PID → 이미지
 - **src/NetThrottle.Core** (`net9.0`) — 모델(`ThrottleRule`, `Direction`, `ProtocolKind`), 토큰 버킷 셰이퍼, 설정(`AppSettings`, `SettingsStore`).
 - **src/NetThrottle.Engine** (`net9.0-windows`) — WinDivert P/Invoke, IP Helper 포트→PID 매핑, 패킷 펌프(`PacketEngine`), 패킷 파서.
 - **src/NetThrottle.App** (`net9.0-windows`, WPF) — MVVM UI, 서비스(`EngineController`, `SettingsService`, `ProcessListProvider`, `GitHubUpdateService`), `MainWindow.xaml`, 관리자 권한 매니페스트(`requireAdministrator`).
+- **tools/NetThrottle.SmokeTest** (`net9.0-windows`) — 실제 throttle 동작을 검증하는 헤드리스 루프백 처리량 테스트(관리자 권한 실행).
 
 ## 라이선스
 

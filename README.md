@@ -85,6 +85,10 @@ src/NetThrottle.Engine/native/x64/
 
 The Engine project copies them to the build output. Alternatively, place the two files beside the built `NetThrottle.exe`.
 
+### Verifying the engine
+
+`tools/NetThrottle.SmokeTest` is a headless end-to-end check. It transfers bulk data over a loopback TCP socket with the engine off (baseline) and again with a per-process cap, then compares the throughput. Place the WinDivert files next to the built `NetThrottle.SmokeTest.exe` and run it **as administrator** — a passing run shows the throttled rate collapsing to near the cap (e.g. ~5400 MB/s → ~7 MB/s for a 4 MB/s cap).
+
 ## Releasing
 
 Releases are tag-driven. Pushing a `vX.Y.Z` tag runs [`.github/workflows/release.yml`](.github/workflows/release.yml), which:
@@ -108,6 +112,7 @@ git push origin v1.2.3
 | `src/NetThrottle.Core` | `net9.0` | Models (`ThrottleRule`, `Direction`, `ProtocolKind`), the token-bucket shaper, and settings (`AppSettings`, `SettingsStore`). |
 | `src/NetThrottle.Engine` | `net9.0-windows` | WinDivert P/Invoke, IP Helper port→PID mapping, the packet pump (`PacketEngine`), and packet parsing. |
 | `src/NetThrottle.App` | `net9.0-windows` (WPF) | MVVM UI, services (`EngineController`, `SettingsService`, `ProcessListProvider`, `GitHubUpdateService`), and the `requireAdministrator` manifest. |
+| `tools/NetThrottle.SmokeTest` | `net9.0-windows` | Headless loopback throughput check that verifies real throttling (run as administrator). |
 
 ## License
 
