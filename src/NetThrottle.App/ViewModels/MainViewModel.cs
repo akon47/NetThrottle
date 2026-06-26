@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
-using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Threading;
 using NetThrottle.App.Common;
@@ -10,8 +11,12 @@ using NetThrottle.Engine;
 
 namespace NetThrottle.App.ViewModels;
 
-/// <summary>The single window's view model: owns the rule list, the engine toggle,
-/// live-rate sampling, and the update banner.</summary>
+/// <summary>
+/// The window's view model. The grid shows every running process (name-sorted),
+/// merged with any process that has a saved limit. Typing a cap applies it
+/// immediately while the engine is on. A limited process that exits stays in the
+/// list (shown red) and re-applies automatically when it runs again.
+/// </summary>
 public sealed class MainViewModel : ViewModelBase
 {
     private readonly EngineController _engine;
@@ -19,13 +24,15 @@ public sealed class MainViewModel : ViewModelBase
     private readonly IProcessListProvider _processes;
     private readonly IUpdateService _updates;
     private readonly DispatcherTimer _statsTimer;
+    private readonly DispatcherTimer _refreshTimer;
+    private readonly Dictionary<string, RuleViewModel> _rowsByName = new(StringComparer.OrdinalIgnoreCase);
 
     private IReadOnlyDictionary<string, long> _lastTraffic = new Dictionary<string, long>();
     private long _lastSampleTicks;
     private bool _engineEnabled;
     private string _statusText = "Stopped";
+    private string _filter = string.Empty;
     private bool _isBusy;
-    private bool _suppressPersist;
 
     private bool _isUpdateAvailable;
     private string _updateText = string.Empty;
@@ -41,24 +48,23 @@ public sealed class MainViewModel : ViewModelBase
         _settings = settings;
         _processes = processes;
         _updates = updates;
-
         _engine.Faulted += OnEngineFaulted;
 
-        Rules = new ObservableCollection<RuleViewModel>();
-        _suppressPersist = true;
+        Entries = new ObservableCollection<RuleViewModel>();
+        EntriesView = CollectionViewSource.GetDefaultView(Entries);
+        EntriesView.SortDescriptions.Add(new SortDescription(nameof(RuleViewModel.ProcessName), ListSortDirection.Ascending));
+        EntriesView.Filter = MatchesFilter;
+
+        // Seed rows from saved limits, then merge in the running processes.
         foreach (var rule in _settings.Current.Rules)
-            Rules.Add(Track(new RuleViewModel(rule)));
-        _suppressPersist = false;
-
-        Rules.CollectionChanged += OnRulesCollectionChanged;
-        _engineEnabled = _settings.Current.EngineEnabled;
-
+            AddRow(new RuleViewModel(rule) { IsRunning = false });
         RefreshProcesses();
 
+        _engineEnabled = _settings.Current.EngineEnabled;
+
         ToggleEngineCommand = new RelayCommand(() => ToggleEngine());
-        AddRuleCommand = new RelayCommand(AddRule);
-        RemoveRuleCommand = new RelayCommand(p => { if (p is RuleViewModel r) RemoveRule(r); });
         RefreshProcessesCommand = new RelayCommand(RefreshProcesses);
+        ClearLimitCommand = new RelayCommand(p => { if (p is RuleViewModel r) ClearLimit(r); });
         CheckUpdateCommand = new RelayCommand(() => _ = CheckForUpdatesAsync(silent: false));
         ApplyUpdateCommand = new RelayCommand(() => _ = ApplyUpdateAsync());
         SkipUpdateCommand = new RelayCommand(SkipUpdate);
@@ -67,47 +73,50 @@ public sealed class MainViewModel : ViewModelBase
         _statsTimer.Tick += (_, _) => SampleTraffic();
         _statsTimer.Start();
 
-        // Restore the previous run's engine state.
+        _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        _refreshTimer.Tick += (_, _) => RefreshProcesses();
+        _refreshTimer.Start();
+
         if (_engineEnabled)
             ToggleEngine(forceOn: true);
     }
 
-    public ObservableCollection<RuleViewModel> Rules { get; }
-
+    public ObservableCollection<RuleViewModel> Entries { get; }
+    public ICollectionView EntriesView { get; }
     public Array ProtocolOptions { get; } = Enum.GetValues(typeof(ProtocolKind));
 
-    public ObservableCollection<string> Processes { get; } = new();
-
     public bool IsPortable => SettingsPaths.IsPortable;
-
     public string ModeText => SettingsPaths.IsPortable ? "Portable" : "Installed";
-
     public string SettingsLocation => _settings.Path;
-
     public string AppVersion =>
         System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "0.0.0";
 
     public ICommand ToggleEngineCommand { get; }
-    public ICommand AddRuleCommand { get; }
-    public ICommand RemoveRuleCommand { get; }
     public ICommand RefreshProcessesCommand { get; }
+    public ICommand ClearLimitCommand { get; }
     public ICommand CheckUpdateCommand { get; }
     public ICommand ApplyUpdateCommand { get; }
     public ICommand SkipUpdateCommand { get; }
 
-    /// <summary>Surfaced to the view (code-behind) so it can show a message box.</summary>
     public event Action<string>? Notification;
+    public event Action? ShutdownRequested;
 
     public bool EngineEnabled
     {
         get => _engineEnabled;
-        set { if (SetProperty(ref _engineEnabled, value)) StatusText = value ? "Running" : "Stopped"; }
+        set { if (SetProperty(ref _engineEnabled, value)) StatusText = value ? "Running — limits are live" : "Stopped"; }
     }
 
     public string StatusText
     {
         get => _statusText;
         private set => SetProperty(ref _statusText, value);
+    }
+
+    public string Filter
+    {
+        get => _filter;
+        set { if (SetProperty(ref _filter, value ?? string.Empty)) EntriesView.Refresh(); }
     }
 
     public bool IsBusy
@@ -128,12 +137,131 @@ public sealed class MainViewModel : ViewModelBase
         private set => SetProperty(ref _updateText, value);
     }
 
+    // --- Process list -------------------------------------------------------
+
     public void RefreshProcesses()
     {
-        var names = _processes.GetRunningProcessNames();
-        Processes.Clear();
-        foreach (var n in names) Processes.Add(n);
+        var running = _processes.GetRunningProcessNames();
+        var runningSet = new HashSet<string>(running, StringComparer.OrdinalIgnoreCase);
+
+        foreach (string name in running)
+        {
+            if (_rowsByName.TryGetValue(name, out var row))
+                row.IsRunning = true;
+            else
+                AddRow(new RuleViewModel(new ThrottleRule { ProcessName = name, Protocol = ProtocolKind.Both }) { IsRunning = true });
+        }
+
+        // Processes that are no longer running: keep them only if they carry a
+        // limit (shown red); otherwise drop them from the list.
+        foreach (var row in _rowsByName.Values.ToList())
+        {
+            if (runningSet.Contains(row.ProcessName)) continue;
+            if (row.HasLimit) row.IsRunning = false;
+            else RemoveRow(row);
+        }
     }
+
+    private void AddRow(RuleViewModel row)
+    {
+        if (string.IsNullOrWhiteSpace(row.ProcessName) || _rowsByName.ContainsKey(row.ProcessName)) return;
+        row.Changed += OnRuleChanged;
+        _rowsByName[row.ProcessName] = row;
+        Entries.Add(row);
+    }
+
+    private void RemoveRow(RuleViewModel row)
+    {
+        row.Changed -= OnRuleChanged;
+        _rowsByName.Remove(row.ProcessName);
+        Entries.Remove(row);
+    }
+
+    private bool MatchesFilter(object item) =>
+        item is RuleViewModel row &&
+        (string.IsNullOrWhiteSpace(_filter) ||
+         row.ProcessName.Contains(_filter, StringComparison.OrdinalIgnoreCase));
+
+    private void ClearLimit(RuleViewModel row)
+    {
+        row.DownloadKBps = 0;
+        row.UploadKBps = 0;
+        // A cleared, already-dead row can now leave the list.
+        if (!row.IsRunning) RemoveRow(row);
+    }
+
+    // --- Engine -------------------------------------------------------------
+
+    private void ToggleEngine(bool forceOn = false)
+    {
+        bool turnOn = forceOn || !_engine.IsRunning;
+        try
+        {
+            if (turnOn) { _engine.Start(ActiveModels()); EngineEnabled = true; }
+            else { _engine.Stop(); EngineEnabled = false; }
+            Persist();
+        }
+        catch (Exception ex)
+        {
+            EngineEnabled = false;
+            Persist();
+            Notification?.Invoke(
+                "Failed to start the throttling engine.\n\n" +
+                "Make sure WinDivert.dll / WinDivert64.sys are next to the app and that you are running as administrator.\n\n" +
+                ex.Message);
+        }
+    }
+
+    private void OnRuleChanged()
+    {
+        Persist();
+        if (_engine.IsRunning) _engine.ApplyRules(ActiveModels());
+    }
+
+    private IReadOnlyList<ThrottleRule> ActiveModels() =>
+        Entries.Where(r => r.Enabled && r.HasLimit).Select(r => r.Model).ToList();
+
+    private void Persist()
+    {
+        _settings.Current.Rules = Entries.Where(r => r.HasLimit).Select(r => r.Model).ToList();
+        _settings.Current.EngineEnabled = EngineEnabled;
+        _settings.Save();
+    }
+
+    // --- Live rates ---------------------------------------------------------
+
+    private void SampleTraffic()
+    {
+        long now = Stopwatch.GetTimestamp();
+        var snapshot = _engine.IsRunning ? _engine.SnapshotTraffic() : new Dictionary<string, long>();
+        double elapsed = _lastSampleTicks == 0 ? 1 : (now - _lastSampleTicks) / (double)Stopwatch.Frequency;
+        if (elapsed <= 0) elapsed = 1;
+
+        foreach (var row in Entries)
+        {
+            if (!_engine.IsRunning || !row.IsRunning)
+            {
+                row.CurrentDownload = "—";
+                row.CurrentUpload = "—";
+                continue;
+            }
+
+            row.CurrentDownload = ByteFormat.Rate(RateFor(snapshot, row.ProcessName, Direction.Inbound, elapsed));
+            row.CurrentUpload = ByteFormat.Rate(RateFor(snapshot, row.ProcessName, Direction.Outbound, elapsed));
+        }
+
+        _lastTraffic = snapshot;
+        _lastSampleTicks = now;
+    }
+
+    private double RateFor(IReadOnlyDictionary<string, long> snapshot, string process, Direction direction, double elapsed)
+    {
+        string key = PacketEngine.TrafficKey(process, direction);
+        long delta = snapshot.GetValueOrDefault(key) - _lastTraffic.GetValueOrDefault(key);
+        return delta > 0 ? delta / elapsed : 0;
+    }
+
+    // --- Updates ------------------------------------------------------------
 
     public async Task CheckForUpdatesAsync(bool silent)
     {
@@ -150,7 +278,7 @@ public sealed class MainViewModel : ViewModelBase
             }
 
             if (silent && string.Equals(_settings.Current.SkippedVersion, result.LatestVersion?.ToString(), StringComparison.Ordinal))
-                return; // user dismissed this version
+                return;
 
             _pendingUpdate = result;
             IsUpdateAvailable = true;
@@ -160,104 +288,6 @@ public sealed class MainViewModel : ViewModelBase
         {
             if (!silent) Notification?.Invoke($"Update check failed: {ex.Message}");
         }
-    }
-
-    private void ToggleEngine(bool forceOn = false)
-    {
-        bool turnOn = forceOn || !_engine.IsRunning;
-        try
-        {
-            if (turnOn)
-            {
-                _engine.Start(CurrentModels());
-                EngineEnabled = true;
-            }
-            else
-            {
-                _engine.Stop();
-                EngineEnabled = false;
-            }
-            Persist();
-        }
-        catch (Exception ex)
-        {
-            EngineEnabled = false;
-            Persist();
-            Notification?.Invoke(
-                "Failed to start the throttling engine.\n\n" +
-                "Make sure WinDivert.dll / WinDivert64.sys are next to the app and that you are running as administrator.\n\n" +
-                ex.Message);
-        }
-    }
-
-    private void AddRule()
-    {
-        var rule = new ThrottleRule { ProcessName = string.Empty, Protocol = ProtocolKind.Both };
-        Rules.Add(Track(new RuleViewModel(rule)));
-    }
-
-    private void RemoveRule(RuleViewModel rule) => Rules.Remove(rule);
-
-    private RuleViewModel Track(RuleViewModel vm)
-    {
-        vm.Changed += OnRuleChanged;
-        return vm;
-    }
-
-    private void OnRuleChanged()
-    {
-        Persist();
-        if (_engine.IsRunning) _engine.ApplyRules(CurrentModels());
-    }
-
-    private void OnRulesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        if (e.OldItems is not null)
-            foreach (RuleViewModel vm in e.OldItems) vm.Changed -= OnRuleChanged;
-        OnRuleChanged();
-    }
-
-    private IReadOnlyList<ThrottleRule> CurrentModels() => Rules.Select(r => r.Model).ToList();
-
-    private void Persist()
-    {
-        if (_suppressPersist) return;
-        _settings.Current.Rules = CurrentModels().ToList();
-        _settings.Current.EngineEnabled = EngineEnabled;
-        _settings.Save();
-    }
-
-    private void SampleTraffic()
-    {
-        long now = Stopwatch.GetTimestamp();
-        var snapshot = _engine.IsRunning ? _engine.SnapshotTraffic() : new Dictionary<string, long>();
-        double elapsed = _lastSampleTicks == 0 ? 1 : (now - _lastSampleTicks) / (double)Stopwatch.Frequency;
-        if (elapsed <= 0) elapsed = 1;
-
-        foreach (var rule in Rules)
-        {
-            if (!_engine.IsRunning || string.IsNullOrWhiteSpace(rule.ProcessName))
-            {
-                rule.CurrentDownload = "—";
-                rule.CurrentUpload = "—";
-                continue;
-            }
-
-            rule.CurrentDownload = ByteFormat.Rate(RateFor(snapshot, rule.ProcessName, Direction.Inbound, elapsed));
-            rule.CurrentUpload = ByteFormat.Rate(RateFor(snapshot, rule.ProcessName, Direction.Outbound, elapsed));
-        }
-
-        _lastTraffic = snapshot;
-        _lastSampleTicks = now;
-    }
-
-    private double RateFor(IReadOnlyDictionary<string, long> snapshot, string process, Direction direction, double elapsed)
-    {
-        string key = PacketEngine.TrafficKey(process, direction);
-        long current = snapshot.GetValueOrDefault(key);
-        long previous = _lastTraffic.GetValueOrDefault(key);
-        long delta = current - previous;
-        return delta > 0 ? delta / elapsed : 0;
     }
 
     private async Task ApplyUpdateAsync()
@@ -276,7 +306,6 @@ public sealed class MainViewModel : ViewModelBase
             UpdateText = "Downloading update…";
             var progress = new Progress<double>(p => UpdateText = $"Downloading update… {p:P0}");
             await _updates.DownloadAndLaunchAsync(_pendingUpdate, progress).ConfigureAwait(true);
-            // The installer is now launching; ask the app to exit so files can be replaced.
             ShutdownRequested?.Invoke();
         }
         catch (Exception ex)
@@ -299,13 +328,8 @@ public sealed class MainViewModel : ViewModelBase
         IsUpdateAvailable = false;
     }
 
-    /// <summary>Raised when an update download has launched the installer and the app should close.</summary>
-    public event Action? ShutdownRequested;
-
     private void OnEngineFaulted(Exception ex)
     {
-        // Marshalled to the UI thread via the dispatcher timer's thread affinity is
-        // not guaranteed here, so post through the application dispatcher.
         System.Windows.Application.Current?.Dispatcher.Invoke(() =>
         {
             EngineEnabled = false;
@@ -317,6 +341,7 @@ public sealed class MainViewModel : ViewModelBase
     public void Shutdown()
     {
         _statsTimer.Stop();
+        _refreshTimer.Stop();
         _engine.Stop();
         Persist();
     }

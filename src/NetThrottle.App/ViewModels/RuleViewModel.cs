@@ -12,10 +12,21 @@ public sealed class RuleViewModel : ViewModelBase
 
     private string _currentDownload = "—";
     private string _currentUpload = "—";
+    private bool _isRunning;
 
     public RuleViewModel(ThrottleRule model) => Model = model;
 
     public ThrottleRule Model { get; }
+
+    /// <summary>Whether the process is currently running. Drives the red "dead" styling.</summary>
+    public bool IsRunning
+    {
+        get => _isRunning;
+        set => SetProperty(ref _isRunning, value);
+    }
+
+    /// <summary>True when this row actually constrains traffic in some direction.</summary>
+    public bool HasLimit => Model.DownloadBytesPerSec > 0 || Model.UploadBytesPerSec > 0;
 
     /// <summary>Raised whenever an editable field changes, so the host can persist and re-apply.</summary>
     public event Action? Changed;
@@ -54,7 +65,7 @@ public sealed class RuleViewModel : ViewModelBase
         set
         {
             long bytes = (long)Math.Max(0, value * BytesPerKilobyte);
-            if (Model.DownloadBytesPerSec != bytes) { Model.DownloadBytesPerSec = bytes; OnPropertyChanged(); RaiseChanged(); }
+            if (Model.DownloadBytesPerSec != bytes) { Model.DownloadBytesPerSec = bytes; OnPropertyChanged(); OnPropertyChanged(nameof(HasLimit)); RaiseChanged(); }
         }
     }
 
@@ -65,7 +76,7 @@ public sealed class RuleViewModel : ViewModelBase
         set
         {
             long bytes = (long)Math.Max(0, value * BytesPerKilobyte);
-            if (Model.UploadBytesPerSec != bytes) { Model.UploadBytesPerSec = bytes; OnPropertyChanged(); RaiseChanged(); }
+            if (Model.UploadBytesPerSec != bytes) { Model.UploadBytesPerSec = bytes; OnPropertyChanged(); OnPropertyChanged(nameof(HasLimit)); RaiseChanged(); }
         }
     }
 

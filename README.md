@@ -10,8 +10,10 @@ A Windows desktop app that rate-limits per-process network bandwidth, with separ
 - Independent **download** and **upload** caps in KB/s, where `0` means unlimited.
 - Protocol selection per rule: **TCP**, **UDP**, or **Both**.
 - Traffic shaping that **delays** packets to honor the configured average rate instead of dropping them.
-- Live up/down throughput shown per rule, sampled once per second.
-- Clean WPF UI on .NET 9 with a simple rule grid.
+- Live up/down throughput shown per process, sampled once per second.
+- Live list of every running process (name-sorted) with inline caps that apply instantly.
+- A limited process stays listed (its name turns **red**) after it exits, and the limit re-applies automatically when it runs again.
+- Clean WPF UI on .NET 9 with a filterable process grid.
 - Installer and portable distributions, with automatic update notifications from GitHub Releases.
 
 ## How it works
@@ -53,14 +55,12 @@ The portable folder ships a `portable.marker` file next to the executable. When 
 
 ## Usage
 
-1. Click **Add rule** to create a new entry in the grid.
-2. In the **Process (image name)** column, pick a running process or type an image name such as `chrome.exe`. Use **Refresh apps** to update the list.
-3. Choose a **Protocol**: TCP, UDP, or Both.
-4. Set the **Down KB/s** and **Up KB/s** caps. A value of `0` means unlimited for that direction.
-5. Make sure the rule's **On** checkbox is enabled.
-6. Press **Start** to begin shaping. The app requires Administrator elevation to open the WinDivert driver.
-
-While running, the **↓ live** and **↑ live** columns show the current measured throughput for each rule, updated once per second. Press **Stop** to release all traffic.
+1. Press **Start** to begin monitoring and shaping. The app requires Administrator elevation to open the WinDivert driver.
+2. The grid lists every running process by image name, sorted alphabetically. Type in **Filter** to find one, or click **Refresh apps** to update the list.
+3. On a process row, set a **Down KB/s** and/or **Up KB/s** cap. `0` means unlimited for that direction; the cap applies immediately while the engine is running.
+4. Optionally change the **Protocol** (TCP, UDP, or Both) for that process.
+5. The **↓ live** and **↑ live** columns show each process's current throughput, updated once per second.
+6. A process you have limited stays in the list after it exits — its name turns **red** — and the limit re-applies automatically when it runs again. Click **Clear** to remove a limit. Press **Stop** to release all traffic.
 
 ## Updating
 

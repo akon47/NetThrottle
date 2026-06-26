@@ -124,13 +124,14 @@ public sealed class PacketEngine : IDisposable
             ushort localPort = addr.IsOutbound ? info.SrcPort : info.DstPort;
             string? process = _portMap.ResolveProcessName(info.Protocol, localPort);
 
-            if (process is { Length: > 0 } && FindRule(process, info.Protocol) is { } rule)
+            if (process is { Length: > 0 })
             {
-                // Count traffic for any matched process so the UI can show live
-                // throughput even on a direction the user left unlimited.
+                // Count traffic for every process (not just throttled ones) so the
+                // UI can show live throughput for the whole running-process list.
                 _traffic.AddOrUpdate(BucketKey(process, direction), len, (_, v) => v + len);
 
-                if (rule.LimitsDirection(direction) &&
+                if (FindRule(process, info.Protocol) is { } rule &&
+                    rule.LimitsDirection(direction) &&
                     _buckets.TryGetValue(BucketKey(process, direction), out var bucket))
                     delay = bucket.Reserve(len);
             }

@@ -6,16 +6,16 @@
         xmlns:vm="clr-namespace:NetThrottle.App.ViewModels"
         xmlns:conv="clr-namespace:NetThrottle.App.Converters"
         mc:Ignorable="d"
-        Title="NetThrottle" Height="580" Width="1000" MinWidth="820" MinHeight="420"
+        Title="NetThrottle" Height="600" Width="1020" MinWidth="860" MinHeight="440"
         FontSize="13"
         d:DataContext="{d:DesignInstance vm:MainViewModel}">
     <DockPanel>
 
         <!-- Toolbar -->
         <Border DockPanel.Dock="Top" Background="#FF202124" Padding="12,10">
-            <DockPanel>
-                <Button Command="{Binding ToggleEngineCommand}" Padding="16,6" FontWeight="Bold"
-                        BorderThickness="0" Foreground="White" Cursor="Hand">
+            <DockPanel LastChildFill="False">
+                <Button DockPanel.Dock="Left" Command="{Binding ToggleEngineCommand}" Padding="16,6"
+                        FontWeight="Bold" BorderThickness="0" Foreground="White" Cursor="Hand">
                     <Button.Style>
                         <Style TargetType="Button">
                             <Setter Property="Content" Value="▶  Start" />
@@ -30,12 +30,16 @@
                     </Button.Style>
                 </Button>
 
-                <TextBlock Text="{Binding StatusText}" Foreground="#FFE8EAED" VerticalAlignment="Center"
-                           Margin="14,0,0,0" FontWeight="SemiBold" />
+                <TextBlock DockPanel.Dock="Left" Text="{Binding StatusText}" Foreground="#FFE8EAED"
+                           VerticalAlignment="Center" Margin="14,0,0,0" FontWeight="SemiBold" />
 
-                <!-- Right-aligned actions -->
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
-                    <Button Content="Add rule" Command="{Binding AddRuleCommand}" Padding="12,6" Margin="6,0" />
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Margin="18,0,0,0">
+                    <TextBlock Text="Filter:" Foreground="#FFBDC1C6" VerticalAlignment="Center" Margin="0,0,6,0" />
+                    <TextBox Width="220" VerticalAlignment="Center" VerticalContentAlignment="Center"
+                             Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                     <Button Content="Refresh apps" Command="{Binding RefreshProcessesCommand}" Padding="12,6" Margin="6,0" />
                     <Button Content="Check updates" Command="{Binding CheckUpdateCommand}" Padding="12,6" Margin="6,0" />
                 </StackPanel>
@@ -69,26 +73,34 @@
             </DockPanel>
         </Border>
 
-        <!-- Rules grid -->
-        <DataGrid ItemsSource="{Binding Rules}" AutoGenerateColumns="False" CanUserAddRows="False"
-                  HeadersVisibility="Column" GridLinesVisibility="Horizontal" RowHeight="34"
+        <!-- Process list -->
+        <DataGrid ItemsSource="{Binding EntriesView}" AutoGenerateColumns="False" CanUserAddRows="False"
+                  HeadersVisibility="Column" GridLinesVisibility="Horizontal" RowHeight="32"
                   SelectionMode="Single" Margin="10" BorderThickness="1" BorderBrush="#FFDADCE0"
-                  AlternatingRowBackground="#FFFAFAFA">
+                  AlternatingRowBackground="#FFFAFAFA"
+                  EnableRowVirtualization="True" VirtualizingPanel.IsVirtualizing="True">
             <DataGrid.Columns>
-                <DataGridCheckBoxColumn Header="On" Width="44"
-                                        Binding="{Binding Enabled, UpdateSourceTrigger=PropertyChanged}" />
-
-                <DataGridTemplateColumn Header="Process (image name)" Width="2*">
+                <DataGridTemplateColumn Header="Process (image name)" Width="2*" SortMemberPath="ProcessName">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <ComboBox IsEditable="True" Margin="2" BorderThickness="0" Background="Transparent"
-                                      Text="{Binding ProcessName, UpdateSourceTrigger=LostFocus, Mode=TwoWay}"
-                                      ItemsSource="{Binding DataContext.Processes, RelativeSource={RelativeSource AncestorType=DataGrid}}" />
+                            <TextBlock Text="{Binding ProcessName}" VerticalAlignment="Center" Margin="6,0">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="#FF202124" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsRunning}" Value="False">
+                                                <Setter Property="Foreground" Value="#FFD32F2F" />
+                                                <Setter Property="ToolTip" Value="Not running — the limit re-applies automatically when it starts again." />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <DataGridTemplateColumn Header="Protocol" Width="110">
+                <DataGridTemplateColumn Header="Protocol" Width="104">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <ComboBox Margin="2" BorderThickness="0" Background="Transparent"
@@ -98,20 +110,19 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <DataGridTextColumn Header="Down KB/s (0=∞)" Width="120"
+                <DataGridTextColumn Header="Down KB/s (0=∞)" Width="118"
                                     Binding="{Binding DownloadKBps, UpdateSourceTrigger=LostFocus, StringFormat=0.#}" />
-                <DataGridTextColumn Header="↓ live" Width="92" IsReadOnly="True"
-                                    Binding="{Binding CurrentDownload}" />
-                <DataGridTextColumn Header="Up KB/s (0=∞)" Width="120"
+                <DataGridTextColumn Header="↓ live" Width="88" IsReadOnly="True" Binding="{Binding CurrentDownload}" />
+                <DataGridTextColumn Header="Up KB/s (0=∞)" Width="118"
                                     Binding="{Binding UploadKBps, UpdateSourceTrigger=LostFocus, StringFormat=0.#}" />
-                <DataGridTextColumn Header="↑ live" Width="92" IsReadOnly="True"
-                                    Binding="{Binding CurrentUpload}" />
+                <DataGridTextColumn Header="↑ live" Width="88" IsReadOnly="True" Binding="{Binding CurrentUpload}" />
 
-                <DataGridTemplateColumn Header="" Width="78">
+                <DataGridTemplateColumn Header="" Width="72">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <Button Content="Delete" Margin="3" Padding="6,2"
-                                    Command="{Binding DataContext.RemoveRuleCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                            <Button Content="Clear" Margin="3" Padding="6,2"
+                                    Visibility="{Binding HasLimit, Converter={conv:BoolToVisibilityConverter}}"
+                                    Command="{Binding DataContext.ClearLimitCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
                                     CommandParameter="{Binding}" />
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
