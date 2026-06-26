@@ -5,6 +5,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Threading;
 using NetThrottle.App.Common;
+using NetThrottle.App.Localization;
 using NetThrottle.App.Services;
 using NetThrottle.Core.Models;
 using NetThrottle.Engine;
@@ -26,11 +27,11 @@ public sealed class MainViewModel : ViewModelBase
     private readonly DispatcherTimer _statsTimer;
     private readonly DispatcherTimer _refreshTimer;
     private readonly Dictionary<string, RuleViewModel> _rowsByName = new(StringComparer.OrdinalIgnoreCase);
+    private readonly LocalizationService _loc = LocalizationService.Instance;
 
     private IReadOnlyDictionary<string, long> _lastTraffic = new Dictionary<string, long>();
     private long _lastSampleTicks;
     private bool _engineEnabled;
-    private string _statusText = "Stopped";
     private string _filter = string.Empty;
     private bool _showOnlyLimited;
     private string _totalDownText = "0 B/s";
@@ -52,6 +53,7 @@ public sealed class MainViewModel : ViewModelBase
         _processes = processes;
         _updates = updates;
         _engine.Faulted += OnEngineFaulted;
+        _loc.LanguageChanged += OnLanguageChanged;
 
         Entries = new ObservableCollection<RuleViewModel>();
         EntriesView = CollectionViewSource.GetDefaultView(Entries);
@@ -107,13 +109,34 @@ public sealed class MainViewModel : ViewModelBase
     public bool EngineEnabled
     {
         get => _engineEnabled;
-        set { if (SetProperty(ref _engineEnabled, value)) StatusText = value ? "Running — limits are live" : "Stopped"; }
+        set
+        {
+            if (SetProperty(ref _engineEnabled, value))
+            {
+                OnPropertyChanged(nameof(StatusText));
+                OnPropertyChanged(nameof(ToggleButtonText));
+            }
+        }
     }
 
-    public string StatusText
+    public string StatusText => _loc[_engineEnabled ? "Status.Running" : "Status.Stopped"];
+
+    public string ToggleButtonText =>
+        (_engineEnabled ? "■  " : "▶  ") + _loc[_engineEnabled ? "Toolbar.Stop" : "Toolbar.Start"];
+
+    public IReadOnlyList<LanguageOption> Languages => _loc.Languages;
+
+    public LanguageOption? CurrentLanguage
     {
-        get => _statusText;
-        private set => SetProperty(ref _statusText, value);
+        get => _loc.Languages.FirstOrDefault(l => string.Equals(l.Code, _loc.CurrentCode, StringComparison.OrdinalIgnoreCase));
+        set
+        {
+            if (value is null) return;
+            _loc.SetLanguage(value.Code);
+            _settings.Current.Language = value.Code;
+            _settings.Save();
+            OnPropertyChanged();
+        }
     }
 
     public string Filter
@@ -232,10 +255,7 @@ public sealed class MainViewModel : ViewModelBase
         {
             EngineEnabled = false;
             Persist();
-            Notification?.Invoke(
-                "Failed to start the throttling engine.\n\n" +
-                "Make sure WinDivert.dll / WinDivert64.sys are next to the app and that you are running as administrator.\n\n" +
-                ex.Message);
+            Notification?.Invoke(_loc.Format("Msg.EngineFailed", ex.Message));
         }
     }
 
@@ -317,7 +337,7 @@ public sealed class MainViewModel : ViewModelBase
             {
                 _pendingUpdate = null;
                 IsUpdateAvailable = false;
-                if (!silent) Notification?.Invoke($"You are on the latest version ({result.CurrentVersion.ToString(3)}).");
+                if (!silent) Notification?.Invoke(_loc.Format("Msg.LatestFormat", result.CurrentVersion.ToString(3)));
                 return;
             }
 
@@ -326,11 +346,12 @@ public sealed class MainViewModel : ViewModelBase
 
             _pendingUpdate = result;
             IsUpdateAvailable = true;
-            UpdateText = $"Update available: v{result.LatestVersion?.ToString(3)} (current v{result.CurrentVersion.ToString(3)})";
+            UpdateText = _loc.Format("Update.AvailableFormat",
+                result.LatestVersion?.ToString(3) ?? string.Empty, result.CurrentVersion.ToString(3));
         }
         catch (Exception ex)
         {
-            if (!silent) Notification?.Invoke($"Update check failed: {ex.Message}");
+            if (!silent) Notification?.Invoke(_loc.Format("Msg.UpdateCheckFailedFormat", ex.Message));
         }
     }
 
@@ -347,14 +368,14 @@ public sealed class MainViewModel : ViewModelBase
         try
         {
             IsBusy = true;
-            UpdateText = "Downloading update…";
-            var progress = new Progress<double>(p => UpdateText = $"Downloading update… {p:P0}");
+            UpdateText = _loc["Update.Downloading"];
+            var progress = new Progress<double>(p => UpdateText = _loc.Format("Update.DownloadingFormat", p.ToString("P0")));
             await _updates.DownloadAndLaunchAsync(_pendingUpdate, progress).ConfigureAwait(true);
             ShutdownRequested?.Invoke();
         }
         catch (Exception ex)
         {
-            Notification?.Invoke($"Update failed: {ex.Message}");
+            Notification?.Invoke(_loc.Format("Msg.UpdateFailedFormat", ex.Message));
         }
         finally
         {
@@ -378,8 +399,18 @@ public sealed class MainViewModel : ViewModelBase
         {
             EngineEnabled = false;
             Persist();
-            Notification?.Invoke($"The throttling engine stopped unexpectedly:\n\n{ex.Message}");
+            Notification?.Invoke(_loc.Format("Msg.EngineStopped", ex.Message));
         });
+    }
+
+    private void OnLanguageChanged()
+    {
+        OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(ToggleButtonText));
+        OnPropertyChanged(nameof(CurrentLanguage));
+        if (_pendingUpdate is { } u)
+            UpdateText = _loc.Format("Update.AvailableFormat",
+                u.LatestVersion?.ToString(3) ?? string.Empty, u.CurrentVersion.ToString(3));
     }
 
     public void Shutdown()

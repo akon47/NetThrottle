@@ -9,4 +9,9 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
     }
+
+    private void OnSettingsClick(object sender, RoutedEventArgs e)
+    {
+        new SettingsWindow { Owner = this, DataContext = DataContext }.ShowDialog();
+    }
 }

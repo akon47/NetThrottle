@@ -29,4 +29,11 @@
     <Resource Include="icon.ico" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Locale files ship next to the exe so users can drop in new languages. -->
+    <Content Include="locales\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:NetThrottle.App.ViewModels"
         xmlns:conv="clr-namespace:NetThrottle.App.Converters"
+        xmlns:loc="clr-namespace:NetThrottle.App.Localization"
         mc:Ignorable="d"
         Title="NetThrottle" Height="600" Width="1020" MinWidth="860" MinHeight="440"
         FontSize="13" Background="#FF1E1E1F" Icon="/icon.ico"
@@ -24,11 +25,10 @@
         <Border DockPanel.Dock="Top" Background="{StaticResource PanelBackgroundBrush}"
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="12,10">
             <DockPanel LastChildFill="False">
-                <Button DockPanel.Dock="Left" Command="{Binding ToggleEngineCommand}" Padding="16,6"
-                        FontWeight="Bold" BorderThickness="0" Foreground="White" Cursor="Hand">
+                <Button DockPanel.Dock="Left" Command="{Binding ToggleEngineCommand}" Content="{Binding ToggleButtonText}"
+                        Padding="16,6" FontWeight="Bold" BorderThickness="0" Foreground="White" Cursor="Hand">
                     <Button.Style>
                         <Style TargetType="Button">
-                            <Setter Property="Content" Value="▶  Start" />
                             <Setter Property="Background" Value="#FF2E7D32" />
                             <Setter Property="Template">
                                 <Setter.Value>
@@ -42,7 +42,6 @@
                             </Setter>
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding EngineEnabled}" Value="True">
-                                    <Setter Property="Content" Value="■  Stop" />
                                     <Setter Property="Background" Value="#FFC62828" />
                                 </DataTrigger>
                             </Style.Triggers>
@@ -54,16 +53,17 @@
                            VerticalAlignment="Center" Margin="14,0,0,0" FontWeight="SemiBold" />
 
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Margin="18,0,0,0">
-                    <TextBlock Text="Filter:" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,0" />
-                    <TextBox Width="220" VerticalAlignment="Center" Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Text="{loc:Tr Toolbar.Filter}" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                    <TextBox Width="200" VerticalAlignment="Center" Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" />
                 </StackPanel>
 
-                <CheckBox DockPanel.Dock="Left" Content="Limited only" VerticalAlignment="Center" Margin="16,0,0,0"
+                <CheckBox DockPanel.Dock="Left" Content="{loc:Tr Toolbar.LimitedOnly}" VerticalAlignment="Center" Margin="16,0,0,0"
                           IsChecked="{Binding ShowOnlyLimited}" />
 
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button Content="Refresh apps" Command="{Binding RefreshProcessesCommand}" Margin="6,0" />
-                    <Button Content="Check updates" Command="{Binding CheckUpdateCommand}" Margin="6,0" />
+                    <Button Content="{loc:Tr Toolbar.RefreshApps}" Command="{Binding RefreshProcessesCommand}" Margin="6,0" />
+                    <Button Content="{loc:Tr Toolbar.CheckUpdates}" Command="{Binding CheckUpdateCommand}" Margin="6,0" />
+                    <Button Content="{loc:Tr Toolbar.Settings}" Click="OnSettingsClick" Margin="6,0" />
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -74,8 +74,8 @@
             <DockPanel>
                 <TextBlock Text="{Binding UpdateText}" VerticalAlignment="Center" Foreground="{StaticResource AmberBrush}" />
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
-                    <Button Content="Update now" Command="{Binding ApplyUpdateCommand}" Margin="6,0" />
-                    <Button Content="Skip" Command="{Binding SkipUpdateCommand}" Margin="6,0" />
+                    <Button Content="{loc:Tr Update.Now}" Command="{Binding ApplyUpdateCommand}" Margin="6,0" />
+                    <Button Content="{loc:Tr Update.Skip}" Command="{Binding SkipUpdateCommand}" Margin="6,0" />
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -85,7 +85,7 @@
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="12,6">
             <DockPanel LastChildFill="False">
                 <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextMutedBrush}">
-                    <Run Text="Mode:" />
+                    <Run Text="{loc:Tr Status.Mode}" />
                     <Run Text="{Binding ModeText, Mode=OneWay}" FontWeight="SemiBold" />
                 </TextBlock>
                 <TextBlock Text="{Binding SettingsLocation}" VerticalAlignment="Center" Margin="16,0,0,0"
@@ -103,7 +103,7 @@
         <!-- Process list -->
         <DataGrid ItemsSource="{Binding EntriesView}" AutoGenerateColumns="False" Margin="10">
             <DataGrid.Columns>
-                <DataGridTemplateColumn Header="Process (image name)" Width="2*" SortMemberPath="ProcessName">
+                <DataGridTemplateColumn Header="{loc:Tr Col.Process}" Width="2*" SortMemberPath="ProcessName">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <TextBlock Text="{Binding ProcessName}" VerticalAlignment="Center" Margin="6,0"
@@ -115,7 +115,7 @@
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsRunning}" Value="False">
                                                 <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
-                                                <Setter Property="ToolTip" Value="Not running — the limit re-applies automatically when it starts again." />
+                                                <Setter Property="ToolTip" Value="{loc:Tr Tooltip.NotRunning}" />
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -125,7 +125,7 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <DataGridTemplateColumn Header="Protocol" Width="104">
+                <DataGridTemplateColumn Header="{loc:Tr Col.Protocol}" Width="104">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <ComboBox Margin="2" Height="26"
@@ -138,38 +138,38 @@
                 <DataGridTextColumn Width="128"
                                     Binding="{Binding DownloadKBps, UpdateSourceTrigger=LostFocus, StringFormat=0.#}">
                     <DataGridTextColumn.Header>
-                        <StackPanel Orientation="Horizontal" ToolTip="Download limit · 0 = unlimited">
+                        <StackPanel Orientation="Horizontal" ToolTip="{loc:Tr Tooltip.DownLimit}">
                             <Path Data="{StaticResource DownArrowGeometry}" Fill="{StaticResource DownArrowBrush}"
                                   Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,5,0" />
-                            <TextBlock Text="Down KB/s" VerticalAlignment="Center" />
+                            <TextBlock Text="{loc:Tr Col.DownKBps}" VerticalAlignment="Center" />
                         </StackPanel>
                     </DataGridTextColumn.Header>
                 </DataGridTextColumn>
                 <DataGridTextColumn Width="88" IsReadOnly="True" Binding="{Binding CurrentDownload}">
                     <DataGridTextColumn.Header>
-                        <StackPanel Orientation="Horizontal" ToolTip="Live download rate">
+                        <StackPanel Orientation="Horizontal" ToolTip="{loc:Tr Tooltip.DownLive}">
                             <Path Data="{StaticResource DownArrowGeometry}" Fill="{StaticResource DownArrowBrush}"
                                   Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,5,0" />
-                            <TextBlock Text="live" VerticalAlignment="Center" />
+                            <TextBlock Text="{loc:Tr Col.Live}" VerticalAlignment="Center" />
                         </StackPanel>
                     </DataGridTextColumn.Header>
                 </DataGridTextColumn>
                 <DataGridTextColumn Width="128"
                                     Binding="{Binding UploadKBps, UpdateSourceTrigger=LostFocus, StringFormat=0.#}">
                     <DataGridTextColumn.Header>
-                        <StackPanel Orientation="Horizontal" ToolTip="Upload limit · 0 = unlimited">
+                        <StackPanel Orientation="Horizontal" ToolTip="{loc:Tr Tooltip.UpLimit}">
                             <Path Data="{StaticResource UpArrowGeometry}" Fill="{StaticResource UpArrowBrush}"
                                   Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,5,0" />
-                            <TextBlock Text="Up KB/s" VerticalAlignment="Center" />
+                            <TextBlock Text="{loc:Tr Col.UpKBps}" VerticalAlignment="Center" />
                         </StackPanel>
                     </DataGridTextColumn.Header>
                 </DataGridTextColumn>
                 <DataGridTextColumn Width="88" IsReadOnly="True" Binding="{Binding CurrentUpload}">
                     <DataGridTextColumn.Header>
-                        <StackPanel Orientation="Horizontal" ToolTip="Live upload rate">
+                        <StackPanel Orientation="Horizontal" ToolTip="{loc:Tr Tooltip.UpLive}">
                             <Path Data="{StaticResource UpArrowGeometry}" Fill="{StaticResource UpArrowBrush}"
                                   Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,5,0" />
-                            <TextBlock Text="live" VerticalAlignment="Center" />
+                            <TextBlock Text="{loc:Tr Col.Live}" VerticalAlignment="Center" />
                         </StackPanel>
                     </DataGridTextColumn.Header>
                 </DataGridTextColumn>
@@ -177,7 +177,7 @@
                 <DataGridTemplateColumn Header="" Width="72">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <Button Content="Clear" Margin="3" Padding="6,2"
+                            <Button Content="{loc:Tr Col.Clear}" Margin="3" Padding="6,2"
                                     Visibility="{Binding HasLimit, Converter={conv:BoolToVisibilityConverter}}"
                                     Command="{Binding DataContext.ClearLimitCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
                                     CommandParameter="{Binding}" />

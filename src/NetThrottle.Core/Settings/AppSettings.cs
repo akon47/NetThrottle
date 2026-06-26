@@ -11,5 +11,8 @@ public sealed class AppSettings
     /// <summary>A release version the user chose to skip in the update prompt (e.g. "1.2.3").</summary>
     public string? SkippedVersion { get; set; }
 
+    /// <summary>Selected UI language code (locale file name, e.g. "en", "ko"). Null = follow the OS.</summary>
+    public string? Language { get; set; }
+
     public List<ThrottleRule> Rules { get; set; } = new();
 }

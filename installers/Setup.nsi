@@ -101,6 +101,10 @@ Section "NetThrottle" SEC01
   File "${SRC_DIR}\WinDivert.dll"
   File "${SRC_DIR}\WinDivert64.sys"
 
+  SetOutPath "$INSTDIR\locales"
+  File "${SRC_DIR}\locales\*.json"
+  SetOutPath "$INSTDIR"
+
   CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
   CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\${APP_EXE}"
   CreateShortCut "$DESKTOP\${PRODUCT_NAME}.lnk" "$INSTDIR\${APP_EXE}"
@@ -133,6 +137,8 @@ Section Uninstall
   Delete "$INSTDIR\${APP_EXE}"
   Delete "$INSTDIR\WinDivert.dll"
   Delete "$INSTDIR\WinDivert64.sys"
+  Delete "$INSTDIR\locales\*.json"
+  RMDir "$INSTDIR\locales"
 
   Delete "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk"
   RMDir "$SMPROGRAMS\${PRODUCT_NAME}"
