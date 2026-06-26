@@ -32,6 +32,9 @@ public sealed class MainViewModel : ViewModelBase
     private bool _engineEnabled;
     private string _statusText = "Stopped";
     private string _filter = string.Empty;
+    private bool _showOnlyLimited;
+    private string _totalDownText = "0 B/s";
+    private string _totalUpText = "0 B/s";
     private bool _isBusy;
 
     private bool _isUpdateAvailable;
@@ -60,8 +63,6 @@ public sealed class MainViewModel : ViewModelBase
             AddRow(new RuleViewModel(rule) { IsRunning = false });
         RefreshProcesses();
 
-        _engineEnabled = _settings.Current.EngineEnabled;
-
         ToggleEngineCommand = new RelayCommand(() => ToggleEngine());
         RefreshProcessesCommand = new RelayCommand(RefreshProcesses);
         ClearLimitCommand = new RelayCommand(p => { if (p is RuleViewModel r) ClearLimit(r); });
@@ -77,7 +78,9 @@ public sealed class MainViewModel : ViewModelBase
         _refreshTimer.Tick += (_, _) => RefreshProcesses();
         _refreshTimer.Start();
 
-        if (_engineEnabled)
+        // Restore the previous run's engine state. EngineEnabled starts false so
+        // the setter fires and StatusText updates when the engine turns on.
+        if (_settings.Current.EngineEnabled)
             ToggleEngine(forceOn: true);
     }
 
@@ -117,6 +120,27 @@ public sealed class MainViewModel : ViewModelBase
     {
         get => _filter;
         set { if (SetProperty(ref _filter, value ?? string.Empty)) EntriesView.Refresh(); }
+    }
+
+    /// <summary>When on, the grid shows only processes that carry a limit.</summary>
+    public bool ShowOnlyLimited
+    {
+        get => _showOnlyLimited;
+        set { if (SetProperty(ref _showOnlyLimited, value)) EntriesView.Refresh(); }
+    }
+
+    /// <summary>Combined live download rate across all processes.</summary>
+    public string TotalDownText
+    {
+        get => _totalDownText;
+        private set => SetProperty(ref _totalDownText, value);
+    }
+
+    /// <summary>Combined live upload rate across all processes.</summary>
+    public string TotalUpText
+    {
+        get => _totalUpText;
+        private set => SetProperty(ref _totalUpText, value);
     }
 
     public bool IsBusy
@@ -177,10 +201,13 @@ public sealed class MainViewModel : ViewModelBase
         Entries.Remove(row);
     }
 
-    private bool MatchesFilter(object item) =>
-        item is RuleViewModel row &&
-        (string.IsNullOrWhiteSpace(_filter) ||
-         row.ProcessName.Contains(_filter, StringComparison.OrdinalIgnoreCase));
+    private bool MatchesFilter(object item)
+    {
+        if (item is not RuleViewModel row) return false;
+        if (_showOnlyLimited && !row.HasLimit) return false;
+        return string.IsNullOrWhiteSpace(_filter) ||
+               row.ProcessName.Contains(_filter, StringComparison.OrdinalIgnoreCase);
+    }
 
     private void ClearLimit(RuleViewModel row)
     {
@@ -250,8 +277,25 @@ public sealed class MainViewModel : ViewModelBase
             row.CurrentUpload = ByteFormat.Rate(RateFor(snapshot, row.ProcessName, Direction.Outbound, elapsed));
         }
 
+        UpdateTotals(snapshot, elapsed);
+
         _lastTraffic = snapshot;
         _lastSampleTicks = now;
+    }
+
+    private void UpdateTotals(IReadOnlyDictionary<string, long> snapshot, double elapsed)
+    {
+        long down = 0, up = 0;
+        foreach (var (key, value) in snapshot)
+        {
+            long delta = value - _lastTraffic.GetValueOrDefault(key);
+            if (delta <= 0) continue;
+            if (key.EndsWith("|Inbound", StringComparison.Ordinal)) down += delta;
+            else if (key.EndsWith("|Outbound", StringComparison.Ordinal)) up += delta;
+        }
+
+        TotalDownText = ByteFormat.Rate(_engine.IsRunning ? down / elapsed : 0);
+        TotalUpText = ByteFormat.Rate(_engine.IsRunning ? up / elapsed : 0);
     }
 
     private double RateFor(IReadOnlyDictionary<string, long> snapshot, string process, Direction direction, double elapsed)

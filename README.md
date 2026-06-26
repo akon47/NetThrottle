@@ -1,5 +1,9 @@
 # NetThrottle
 
+<p align="center">
+  <img src="docs/screenshot.png" alt="NetThrottle main window" width="880">
+</p>
+
 A Windows desktop app that rate-limits per-process network bandwidth, with separate download and upload caps for each application.
 
 **English** | [한국어](README.ko.md)
@@ -13,7 +17,9 @@ A Windows desktop app that rate-limits per-process network bandwidth, with separ
 - Live up/down throughput shown per process, sampled once per second.
 - Live list of every running process (name-sorted) with inline caps that apply instantly.
 - A limited process stays listed (its name turns **red**) after it exits, and the limit re-applies automatically when it runs again.
-- Clean WPF UI on .NET 9 with a filterable process grid.
+- Live total up/down readout and a "limited only" filter.
+- Closing the window minimizes to the notification tray; throttling keeps running in the background.
+- Clean WPF UI on .NET 9 with a dark theme and a filterable process grid.
 - Installer and portable distributions, with automatic update notifications from GitHub Releases.
 
 ## How it works

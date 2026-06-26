@@ -58,6 +58,9 @@
                     <TextBox Width="220" VerticalAlignment="Center" Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" />
                 </StackPanel>
 
+                <CheckBox DockPanel.Dock="Left" Content="Limited only" VerticalAlignment="Center" Margin="16,0,0,0"
+                          IsChecked="{Binding ShowOnlyLimited}" />
+
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                     <Button Content="Refresh apps" Command="{Binding RefreshProcessesCommand}" Margin="6,0" />
                     <Button Content="Check updates" Command="{Binding CheckUpdateCommand}" Margin="6,0" />
@@ -90,6 +93,9 @@
                            MaxWidth="560" ToolTip="{Binding SettingsLocation}" />
                 <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextMutedBrush}" DockPanel.Dock="Right">
                     <Run Text="v" /><Run Text="{Binding AppVersion, Mode=OneWay}" />
+                </TextBlock>
+                <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" Margin="0,0,18,0">
+                    <Run Text="Σ" Foreground="{StaticResource TextMutedBrush}" /><Run Text="  ↓ " Foreground="{StaticResource DownArrowBrush}" /><Run Text="{Binding TotalDownText, Mode=OneWay}" Foreground="{StaticResource TextPrimaryBrush}" /><Run Text="    ↑ " Foreground="{StaticResource UpArrowBrush}" /><Run Text="{Binding TotalUpText, Mode=OneWay}" Foreground="{StaticResource TextPrimaryBrush}" />
                 </TextBlock>
             </DockPanel>
         </Border>
