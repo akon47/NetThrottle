@@ -24,6 +24,12 @@
     <SolidColorBrush x:Key="RowSelectedBrush"       Color="#4D0A84FF" />
     <SolidColorBrush x:Key="DangerBrush"            Color="#FFFF5252" />
     <SolidColorBrush x:Key="AmberBrush"             Color="#FFFFB300" />
+    <SolidColorBrush x:Key="DownArrowBrush"         Color="#FF34C759" />
+    <SolidColorBrush x:Key="UpArrowBrush"           Color="#FFFF9F0A" />
+
+    <!-- Filled direction arrows used in the download/upload column headers. -->
+    <Geometry x:Key="DownArrowGeometry">M6,1 L10,1 L10,8 L13,8 L8,14 L3,8 L6,8 Z</Geometry>
+    <Geometry x:Key="UpArrowGeometry">M6,14 L10,14 L10,7 L13,7 L8,1 L3,7 L6,7 Z</Geometry>
 
     <!-- TextBlock -->
     <Style TargetType="TextBlock">
@@ -149,6 +155,18 @@
                             </Border>
                         </Popup>
                     </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlHoverBrush}" />
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsDropDownOpen" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -159,7 +177,15 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Thumb">
-                    <Border Background="#FF4A4A50" CornerRadius="3" Margin="2" />
+                    <Border x:Name="Bd" Background="#FF4A4A50" CornerRadius="3" Margin="2" />
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#FF6E6E78" />
+                        </Trigger>
+                        <Trigger Property="IsDragging" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

@@ -100,7 +100,9 @@
                 <DataGridTemplateColumn Header="Process (image name)" Width="2*" SortMemberPath="ProcessName">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <TextBlock Text="{Binding ProcessName}" VerticalAlignment="Center" Margin="6,0">
+                            <TextBlock Text="{Binding ProcessName}" VerticalAlignment="Center" Margin="6,0"
+                                       TextTrimming="CharacterEllipsis" HorizontalAlignment="Stretch"
+                                       ToolTip="{Binding ProcessName}">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
@@ -127,12 +129,44 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
 
-                <DataGridTextColumn Header="Down KB/s (0=∞)" Width="118"
-                                    Binding="{Binding DownloadKBps, UpdateSourceTrigger=LostFocus, StringFormat=0.#}" />
-                <DataGridTextColumn Header="↓ live" Width="88" IsReadOnly="True" Binding="{Binding CurrentDownload}" />
-                <DataGridTextColumn Header="Up KB/s (0=∞)" Width="118"
-                                    Binding="{Binding UploadKBps, UpdateSourceTrigger=LostFocus, StringFormat=0.#}" />
-                <DataGridTextColumn Header="↑ live" Width="88" IsReadOnly="True" Binding="{Binding CurrentUpload}" />
+                <DataGridTextColumn Width="128"
+                                    Binding="{Binding DownloadKBps, UpdateSourceTrigger=LostFocus, StringFormat=0.#}">
+                    <DataGridTextColumn.Header>
+                        <StackPanel Orientation="Horizontal" ToolTip="Download limit · 0 = unlimited">
+                            <Path Data="{StaticResource DownArrowGeometry}" Fill="{StaticResource DownArrowBrush}"
+                                  Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,5,0" />
+                            <TextBlock Text="Down KB/s" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </DataGridTextColumn.Header>
+                </DataGridTextColumn>
+                <DataGridTextColumn Width="88" IsReadOnly="True" Binding="{Binding CurrentDownload}">
+                    <DataGridTextColumn.Header>
+                        <StackPanel Orientation="Horizontal" ToolTip="Live download rate">
+                            <Path Data="{StaticResource DownArrowGeometry}" Fill="{StaticResource DownArrowBrush}"
+                                  Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,5,0" />
+                            <TextBlock Text="live" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </DataGridTextColumn.Header>
+                </DataGridTextColumn>
+                <DataGridTextColumn Width="128"
+                                    Binding="{Binding UploadKBps, UpdateSourceTrigger=LostFocus, StringFormat=0.#}">
+                    <DataGridTextColumn.Header>
+                        <StackPanel Orientation="Horizontal" ToolTip="Upload limit · 0 = unlimited">
+                            <Path Data="{StaticResource UpArrowGeometry}" Fill="{StaticResource UpArrowBrush}"
+                                  Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,5,0" />
+                            <TextBlock Text="Up KB/s" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </DataGridTextColumn.Header>
+                </DataGridTextColumn>
+                <DataGridTextColumn Width="88" IsReadOnly="True" Binding="{Binding CurrentUpload}">
+                    <DataGridTextColumn.Header>
+                        <StackPanel Orientation="Horizontal" ToolTip="Live upload rate">
+                            <Path Data="{StaticResource UpArrowGeometry}" Fill="{StaticResource UpArrowBrush}"
+                                  Width="12" Height="12" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,5,0" />
+                            <TextBlock Text="live" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </DataGridTextColumn.Header>
+                </DataGridTextColumn>
 
                 <DataGridTemplateColumn Header="" Width="72">
                     <DataGridTemplateColumn.CellTemplate>
