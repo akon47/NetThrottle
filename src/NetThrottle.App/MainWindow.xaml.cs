@@ -1,9 +1,10 @@
 using System.Windows;
+using NetThrottle.App.Controls;
 
 namespace NetThrottle.App;
 
 /// <summary>Interaction logic for MainWindow.xaml. All behavior lives in the view model.</summary>
-public partial class MainWindow : Window
+public partial class MainWindow : ThemedWindow
 {
     public MainWindow()
     {

@@ -2,12 +2,12 @@ using System.ComponentModel;
 using System.IO;
 using System.Threading;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media.Imaging;
+using H.NotifyIcon;
 using NetThrottle.App.Localization;
 using NetThrottle.App.Services;
 using NetThrottle.App.ViewModels;
-using Forms = System.Windows.Forms;
-using Application = System.Windows.Application;
-using MessageBox = System.Windows.MessageBox;
 
 namespace NetThrottle.App;
 
@@ -23,7 +23,7 @@ public partial class App : Application
     private Mutex? _instanceMutex;
     private EngineController? _engine;
     private MainViewModel? _viewModel;
-    private Forms.NotifyIcon? _tray;
+    private TaskbarIcon? _tray;
     private bool _exiting;
     private bool _trayHintShown;
 
@@ -69,54 +69,37 @@ public partial class App : Application
     private void CreateTrayIcon()
     {
         var loc = LocalizationService.Instance;
-        var menu = new Forms.ContextMenuStrip
+        var theme = new ResourceDictionary { Source = new Uri("pack://application:,,,/Themes/DarkTheme.xaml") };
+
+        // A WPF context menu, dark-styled from the shared theme (the menu lives
+        // outside the window tree, so it carries its own theme dictionary).
+        var menu = new ContextMenu { Style = theme[typeof(ContextMenu)] as Style };
+        menu.Resources.MergedDictionaries.Add(theme);
+
+        var open = new MenuItem { Header = loc["Tray.Open"] };
+        open.Click += (_, _) => ShowMainWindow();
+        var exit = new MenuItem { Header = loc["Tray.Exit"] };
+        exit.Click += (_, _) => ExitApplication();
+        menu.Items.Add(open);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(exit);
+
+        _tray = new TaskbarIcon
         {
-            Renderer = new DarkMenuRenderer(),
-            BackColor = System.Drawing.Color.FromArgb(0x33, 0x33, 0x37),
-            ForeColor = System.Drawing.Color.White,
-            ShowImageMargin = false,
+            ToolTipText = "NetThrottle",
+            ContextMenu = menu,
+            Visibility = Visibility.Visible,
         };
-        menu.Items.Add(loc["Tray.Open"], null, (_, _) => ShowMainWindow());
-        menu.Items.Add(new Forms.ToolStripSeparator());
-        menu.Items.Add(loc["Tray.Exit"], null, (_, _) => ExitApplication());
-
-        _tray = new Forms.NotifyIcon
+        try
         {
-            Icon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!),
-            Text = "NetThrottle",
-            Visible = true,
-            ContextMenuStrip = menu,
-        };
-        _tray.DoubleClick += (_, _) => ShowMainWindow();
-    }
-
-    /// <summary>Dark renderer/colors for the WinForms tray menu so it matches the app theme.</summary>
-    private sealed class DarkMenuRenderer : Forms.ToolStripProfessionalRenderer
-    {
-        public DarkMenuRenderer() : base(new DarkColorTable()) { }
-
-        protected override void OnRenderItemText(Forms.ToolStripItemTextRenderEventArgs e)
-        {
-            e.TextColor = System.Drawing.Color.White;
-            base.OnRenderItemText(e);
+            _tray.IconSource = BitmapFrame.Create(
+                new Uri("pack://application:,,,/icon.ico"), BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
         }
-    }
+        catch { /* icon load failure is non-fatal */ }
 
-    private sealed class DarkColorTable : Forms.ProfessionalColorTable
-    {
-        private static System.Drawing.Color Rgb(int r, int g, int b) => System.Drawing.Color.FromArgb(r, g, b);
-
-        public override System.Drawing.Color ToolStripDropDownBackground => Rgb(0x33, 0x33, 0x37);
-        public override System.Drawing.Color ImageMarginGradientBegin => Rgb(0x33, 0x33, 0x37);
-        public override System.Drawing.Color ImageMarginGradientMiddle => Rgb(0x33, 0x33, 0x37);
-        public override System.Drawing.Color ImageMarginGradientEnd => Rgb(0x33, 0x33, 0x37);
-        public override System.Drawing.Color MenuBorder => Rgb(0x3F, 0x3F, 0x46);
-        public override System.Drawing.Color MenuItemBorder => Rgb(0x0A, 0x84, 0xFF);
-        public override System.Drawing.Color MenuItemSelected => Rgb(0x2A, 0x3A, 0x55);
-        public override System.Drawing.Color MenuItemSelectedGradientBegin => Rgb(0x2A, 0x3A, 0x55);
-        public override System.Drawing.Color MenuItemSelectedGradientEnd => Rgb(0x2A, 0x3A, 0x55);
-        public override System.Drawing.Color SeparatorDark => Rgb(0x3F, 0x3F, 0x46);
-        public override System.Drawing.Color SeparatorLight => Rgb(0x3F, 0x3F, 0x46);
+        _tray.TrayLeftMouseUp += (_, _) => ShowMainWindow();
+        _tray.TrayMouseDoubleClick += (_, _) => ShowMainWindow();
+        _tray.ForceCreate();
     }
 
     private void OnWindowClosing(object? sender, CancelEventArgs e)
@@ -129,8 +112,8 @@ public partial class App : Application
 
         if (!_trayHintShown)
         {
-            _tray?.ShowBalloonTip(2500, "NetThrottle",
-                LocalizationService.Instance["Tray.Hint"], Forms.ToolTipIcon.Info);
+            try { _tray?.ShowNotification(title: "NetThrottle", message: LocalizationService.Instance["Tray.Hint"]); }
+            catch { /* notifications can be disabled by the OS */ }
             _trayHintShown = true;
         }
     }
@@ -150,7 +133,7 @@ public partial class App : Application
         _exiting = true;
         if (_tray is not null)
         {
-            _tray.Visible = false;
+            _tray.Visibility = Visibility.Collapsed;
             _tray.Dispose();
             _tray = null;
         }

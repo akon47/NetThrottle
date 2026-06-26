@@ -31,6 +31,8 @@
     <Geometry x:Key="DownArrowGeometry">M6,1 L10,1 L10,8 L13,8 L8,14 L3,8 L6,8 Z</Geometry>
     <Geometry x:Key="UpArrowGeometry">M6,14 L10,14 L10,7 L13,7 L8,1 L3,7 L6,7 Z</Geometry>
 
+    <DropShadowEffect x:Key="MenuShadow" BlurRadius="12" Direction="270" ShadowDepth="3" Opacity="0.4" Color="#000000" />
+
     <!-- TextBlock -->
     <Style TargetType="TextBlock">
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
@@ -206,11 +208,33 @@
 
     <!-- Context menu -->
     <Style TargetType="ContextMenu">
-        <Setter Property="Background" Value="{StaticResource ControlBackgroundBrush}" />
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Padding" Value="3" />
+        <Setter Property="HasDropShadow" Value="False" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContextMenu">
+                    <Border Margin="6" Padding="3" CornerRadius="6" ClipToBounds="True"
+                            Background="{StaticResource ControlBackgroundBrush}"
+                            BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                            Effect="{StaticResource MenuShadow}">
+                        <ItemsPresenter />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="Separator">
+        <Setter Property="Margin" Value="8,4" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Separator">
+                    <Border Height="1" Background="{StaticResource BorderBrush}" SnapsToDevicePixels="True" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <Style TargetType="MenuItem">
@@ -371,6 +395,147 @@
         <Setter Property="SelectionMode" Value="Single" />
         <Setter Property="EnableRowVirtualization" Value="True" />
         <Setter Property="RowDetailsVisibilityMode" Value="Collapsed" />
+    </Style>
+
+    <!-- ===== Custom window chrome (dark title bar) ===== -->
+    <WindowChrome x:Key="NormalChrome" CaptionHeight="34" CornerRadius="0" GlassFrameThickness="0"
+                  ResizeBorderThickness="6" UseAeroCaptionButtons="False" />
+    <WindowChrome x:Key="MaximizedChrome" CaptionHeight="34" CornerRadius="0" GlassFrameThickness="0"
+                  ResizeBorderThickness="0" UseAeroCaptionButtons="False" />
+
+    <Geometry x:Key="MinimizeGlyph">M0,5 L10,5 L10,6 L0,6 Z</Geometry>
+    <Geometry x:Key="MaximizeGlyph">F0 M0,0 L10,0 L10,10 L0,10 Z M1.5,1.5 L8.5,1.5 L8.5,8.5 L1.5,8.5 Z</Geometry>
+    <Geometry x:Key="RestoreGlyph">F0 M3,0 L10,0 L10,7 L3,7 Z M4,1 L9,1 L9,6 L4,6 Z M0,3 L7,3 L7,10 L0,10 Z M1,4 L6,4 L6,9 L1,9 Z</Geometry>
+    <Geometry x:Key="CloseGlyph">M0,1 L1,0 L10,9 L9,10 Z M9,0 L10,1 L1,10 L0,9 Z</Geometry>
+
+    <Style x:Key="CaptionButton" TargetType="Button">
+        <Setter Property="Width" Value="46" />
+        <Setter Property="Height" Value="34" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />
+        <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlHoverBrush}" />
+                            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource ControlPressedBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="CloseCaptionButton" TargetType="Button" BasedOn="{StaticResource CaptionButton}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#FFE34234" />
+                            <Setter Property="Foreground" Value="White" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#FFC42B1C" />
+                            <Setter Property="Foreground" Value="White" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="ThemedWindowStyle" TargetType="Window">
+        <Setter Property="Background" Value="{StaticResource WindowBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="WindowChrome.WindowChrome" Value="{StaticResource NormalChrome}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Window">
+                    <Border x:Name="LayoutRoot" Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+                        <Grid x:Name="RootGrid">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="34" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <!-- Title bar -->
+                            <Border Grid.Row="0" Background="{StaticResource PanelBackgroundBrush}"
+                                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Image Grid.Column="0" Source="{TemplateBinding Icon}" Width="16" Height="16"
+                                           Margin="10,0,0,0" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Margin="8,0" VerticalAlignment="Center" FontSize="12"
+                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                               Text="{TemplateBinding Title}" TextTrimming="CharacterEllipsis" />
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                        <Button x:Name="MinBtn" Style="{StaticResource CaptionButton}"
+                                                Command="{x:Static SystemCommands.MinimizeWindowCommand}">
+                                            <Path Width="10" Height="10" Stretch="Uniform" Data="{StaticResource MinimizeGlyph}"
+                                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                        </Button>
+                                        <Button x:Name="MaxBtn" Style="{StaticResource CaptionButton}"
+                                                Command="{x:Static SystemCommands.MaximizeWindowCommand}">
+                                            <Path Width="10" Height="10" Stretch="Uniform" Data="{StaticResource MaximizeGlyph}"
+                                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                        </Button>
+                                        <Button x:Name="RestoreBtn" Style="{StaticResource CaptionButton}" Visibility="Collapsed"
+                                                Command="{x:Static SystemCommands.RestoreWindowCommand}">
+                                            <Path Width="10" Height="10" Stretch="Uniform" Data="{StaticResource RestoreGlyph}"
+                                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                        </Button>
+                                        <Button x:Name="CloseBtn" Style="{StaticResource CloseCaptionButton}"
+                                                Command="{x:Static SystemCommands.CloseWindowCommand}">
+                                            <Path Width="10" Height="10" Stretch="Uniform" Data="{StaticResource CloseGlyph}"
+                                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <!-- Window body -->
+                            <Border Grid.Row="1" Background="{TemplateBinding Background}">
+                                <AdornerDecorator>
+                                    <ContentPresenter />
+                                </AdornerDecorator>
+                            </Border>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="WindowState" Value="Maximized">
+                            <Setter Property="WindowChrome.WindowChrome" Value="{StaticResource MaximizedChrome}" />
+                            <Setter TargetName="RootGrid" Property="Margin" Value="7" />
+                            <Setter TargetName="MaxBtn" Property="Visibility" Value="Collapsed" />
+                            <Setter TargetName="RestoreBtn" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="ResizeMode" Value="NoResize">
+                            <Setter TargetName="MinBtn" Property="Visibility" Value="Collapsed" />
+                            <Setter TargetName="MaxBtn" Property="Visibility" Value="Collapsed" />
+                            <Setter TargetName="RestoreBtn" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
 </ResourceDictionary>
