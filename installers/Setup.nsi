@@ -1,4 +1,4 @@
-; NetThrottle NSIS installer script
+﻿; NetThrottle NSIS installer script
 ; Build:  makensis -DVERSION=1.2.3 -DSRC_DIR=..\publish -DOUT_DIR=..\dist Setup.nsi
 ; Produces: <OUT_DIR>\NetThrottle_v<VERSION>_Setup.exe
 
