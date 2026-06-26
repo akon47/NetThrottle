@@ -8,6 +8,7 @@
     <UseWPF>true</UseWPF>
     <Platforms>x64</Platforms>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>icon.ico</ApplicationIcon>
     <AssemblyName>NetThrottle</AssemblyName>
     <RootNamespace>NetThrottle.App</RootNamespace>
     <Product>NetThrottle</Product>
@@ -20,6 +21,11 @@
   <ItemGroup>
     <ProjectReference Include="..\NetThrottle.Core\NetThrottle.Core.csproj" />
     <ProjectReference Include="..\NetThrottle.Engine\NetThrottle.Engine.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Embedded so the window/taskbar can show the icon via a pack URI. -->
+    <Resource Include="icon.ico" />
   </ItemGroup>
 
 </Project>

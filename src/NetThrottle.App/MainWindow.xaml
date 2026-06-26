@@ -7,12 +7,22 @@
         xmlns:conv="clr-namespace:NetThrottle.App.Converters"
         mc:Ignorable="d"
         Title="NetThrottle" Height="600" Width="1020" MinWidth="860" MinHeight="440"
-        FontSize="13"
+        FontSize="13" Background="#FF1E1E1F" Icon="/icon.ico"
+        TextOptions.TextFormattingMode="Ideal"
         d:DataContext="{d:DesignInstance vm:MainViewModel}">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/NetThrottle;component/Themes/DarkTheme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
     <DockPanel>
 
         <!-- Toolbar -->
-        <Border DockPanel.Dock="Top" Background="#FF202124" Padding="12,10">
+        <Border DockPanel.Dock="Top" Background="{StaticResource PanelBackgroundBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="12,10">
             <DockPanel LastChildFill="False">
                 <Button DockPanel.Dock="Left" Command="{Binding ToggleEngineCommand}" Padding="16,6"
                         FontWeight="Bold" BorderThickness="0" Foreground="White" Cursor="Hand">
@@ -20,6 +30,16 @@
                         <Style TargetType="Button">
                             <Setter Property="Content" Value="▶  Start" />
                             <Setter Property="Background" Value="#FF2E7D32" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}" CornerRadius="4"
+                                                Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding EngineEnabled}" Value="True">
                                     <Setter Property="Content" Value="■  Stop" />
@@ -30,55 +50,52 @@
                     </Button.Style>
                 </Button>
 
-                <TextBlock DockPanel.Dock="Left" Text="{Binding StatusText}" Foreground="#FFE8EAED"
+                <TextBlock DockPanel.Dock="Left" Text="{Binding StatusText}" Foreground="{StaticResource TextPrimaryBrush}"
                            VerticalAlignment="Center" Margin="14,0,0,0" FontWeight="SemiBold" />
 
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Margin="18,0,0,0">
-                    <TextBlock Text="Filter:" Foreground="#FFBDC1C6" VerticalAlignment="Center" Margin="0,0,6,0" />
-                    <TextBox Width="220" VerticalAlignment="Center" VerticalContentAlignment="Center"
-                             Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Text="Filter:" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                    <TextBox Width="220" VerticalAlignment="Center" Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" />
                 </StackPanel>
 
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button Content="Refresh apps" Command="{Binding RefreshProcessesCommand}" Padding="12,6" Margin="6,0" />
-                    <Button Content="Check updates" Command="{Binding CheckUpdateCommand}" Padding="12,6" Margin="6,0" />
+                    <Button Content="Refresh apps" Command="{Binding RefreshProcessesCommand}" Margin="6,0" />
+                    <Button Content="Check updates" Command="{Binding CheckUpdateCommand}" Margin="6,0" />
                 </StackPanel>
             </DockPanel>
         </Border>
 
         <!-- Update banner -->
-        <Border DockPanel.Dock="Top" Background="#FFFFF3CD" BorderBrush="#FFFFE08A" BorderThickness="0,0,0,1"
+        <Border DockPanel.Dock="Top" Background="#FF332B00" BorderBrush="#FF5A4A00" BorderThickness="0,0,0,1"
                 Padding="12,8" Visibility="{Binding IsUpdateAvailable, Converter={conv:BoolToVisibilityConverter}}">
             <DockPanel>
-                <TextBlock Text="{Binding UpdateText}" VerticalAlignment="Center" Foreground="#FF664D03" />
+                <TextBlock Text="{Binding UpdateText}" VerticalAlignment="Center" Foreground="{StaticResource AmberBrush}" />
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
-                    <Button Content="Update now" Command="{Binding ApplyUpdateCommand}" Padding="12,4" Margin="6,0" />
-                    <Button Content="Skip" Command="{Binding SkipUpdateCommand}" Padding="12,4" Margin="6,0" />
+                    <Button Content="Update now" Command="{Binding ApplyUpdateCommand}" Margin="6,0" />
+                    <Button Content="Skip" Command="{Binding SkipUpdateCommand}" Margin="6,0" />
                 </StackPanel>
             </DockPanel>
         </Border>
 
         <!-- Status bar -->
-        <Border DockPanel.Dock="Bottom" Background="#FFF1F3F4" Padding="12,6">
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource PanelBackgroundBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="12,6">
             <DockPanel LastChildFill="False">
-                <TextBlock VerticalAlignment="Center" Foreground="#FF5F6368">
+                <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextMutedBrush}">
                     <Run Text="Mode:" />
                     <Run Text="{Binding ModeText, Mode=OneWay}" FontWeight="SemiBold" />
                 </TextBlock>
                 <TextBlock Text="{Binding SettingsLocation}" VerticalAlignment="Center" Margin="16,0,0,0"
-                           Foreground="#FF80868B" TextTrimming="CharacterEllipsis" MaxWidth="560" ToolTip="{Binding SettingsLocation}" />
-                <TextBlock VerticalAlignment="Center" Foreground="#FF5F6368" DockPanel.Dock="Right">
+                           Foreground="{StaticResource TextMutedBrush}" TextTrimming="CharacterEllipsis"
+                           MaxWidth="560" ToolTip="{Binding SettingsLocation}" />
+                <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextMutedBrush}" DockPanel.Dock="Right">
                     <Run Text="v" /><Run Text="{Binding AppVersion, Mode=OneWay}" />
                 </TextBlock>
             </DockPanel>
         </Border>
 
         <!-- Process list -->
-        <DataGrid ItemsSource="{Binding EntriesView}" AutoGenerateColumns="False" CanUserAddRows="False"
-                  HeadersVisibility="Column" GridLinesVisibility="Horizontal" RowHeight="32"
-                  SelectionMode="Single" Margin="10" BorderThickness="1" BorderBrush="#FFDADCE0"
-                  AlternatingRowBackground="#FFFAFAFA"
-                  EnableRowVirtualization="True" VirtualizingPanel.IsVirtualizing="True">
+        <DataGrid ItemsSource="{Binding EntriesView}" AutoGenerateColumns="False" Margin="10">
             <DataGrid.Columns>
                 <DataGridTemplateColumn Header="Process (image name)" Width="2*" SortMemberPath="ProcessName">
                     <DataGridTemplateColumn.CellTemplate>
@@ -86,10 +103,10 @@
                             <TextBlock Text="{Binding ProcessName}" VerticalAlignment="Center" Margin="6,0">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
-                                        <Setter Property="Foreground" Value="#FF202124" />
+                                        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsRunning}" Value="False">
-                                                <Setter Property="Foreground" Value="#FFD32F2F" />
+                                                <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
                                                 <Setter Property="ToolTip" Value="Not running — the limit re-applies automatically when it starts again." />
                                             </DataTrigger>
                                         </Style.Triggers>
@@ -103,7 +120,7 @@
                 <DataGridTemplateColumn Header="Protocol" Width="104">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
-                            <ComboBox Margin="2" BorderThickness="0" Background="Transparent"
+                            <ComboBox Margin="2" Height="26"
                                       SelectedItem="{Binding Protocol, UpdateSourceTrigger=PropertyChanged}"
                                       ItemsSource="{Binding DataContext.ProtocolOptions, RelativeSource={RelativeSource AncestorType=DataGrid}}" />
                         </DataTemplate>
