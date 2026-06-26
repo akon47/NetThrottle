@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:NetThrottle.App.ViewModels"
+        xmlns:conv="clr-namespace:NetThrottle.App.Converters"
         mc:Ignorable="d"
         Title="NetThrottle" Height="580" Width="1000" MinWidth="820" MinHeight="420"
         FontSize="13"
@@ -43,7 +44,7 @@
 
         <!-- Update banner -->
         <Border DockPanel.Dock="Top" Background="#FFFFF3CD" BorderBrush="#FFFFE08A" BorderThickness="0,0,0,1"
-                Padding="12,8" Visibility="{Binding IsUpdateAvailable, Converter={StaticResource BoolToVis}}">
+                Padding="12,8" Visibility="{Binding IsUpdateAvailable, Converter={conv:BoolToVisibilityConverter}}">
             <DockPanel>
                 <TextBlock Text="{Binding UpdateText}" VerticalAlignment="Center" Foreground="#FF664D03" />
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
