@@ -31,7 +31,7 @@ public sealed class EngineController : IDisposable
 
     public void ApplyRules(IEnumerable<ThrottleRule> rules) => _engine.ApplyRules(rules);
 
-    public IReadOnlyDictionary<string, long> SnapshotTraffic() => _engine.SnapshotTraffic();
+    public IReadOnlyDictionary<(string Process, Direction Direction), long> SnapshotTraffic() => _engine.SnapshotTraffic();
 
     public void Dispose() => _engine.Dispose();
 }

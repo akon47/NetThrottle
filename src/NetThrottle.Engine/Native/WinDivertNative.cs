@@ -40,6 +40,13 @@ internal static class WinDivertNative
         Reflect = 4,
     }
 
+    public enum Param
+    {
+        QueueLength = 0,
+        QueueTime = 1,
+        QueueSize = 2,
+    }
+
     [Flags]
     public enum OpenFlags : ulong
     {
@@ -92,6 +99,10 @@ internal static class WinDivertNative
     [DllImport(Dll, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool WinDivertClose(nint handle);
+
+    [DllImport(Dll, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool WinDivertSetParam(nint handle, Param param, ulong value);
 
     /// <summary>Recompute checksums after a packet is modified. Flags 0 = all.</summary>
     [DllImport(Dll, SetLastError = true)]

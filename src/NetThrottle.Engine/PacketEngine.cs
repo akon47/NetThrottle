@@ -7,38 +7,52 @@ using NetThrottle.Engine.Native;
 namespace NetThrottle.Engine;
 
 /// <summary>
-/// The traffic-shaping core. Opens a WinDivert handle, reads packets on a
-/// dedicated pump thread, attributes each to a process, and releases it through
-/// a per-(process, direction) <see cref="TokenBucket"/>. Packets are never
-/// dropped — they are delayed to honor the configured average rate.
+/// The traffic-shaping core. It runs in one of two modes:
+///
+/// * <b>Sniff</b> (no active limits): a copy of each TCP/UDP packet is read for
+///   live statistics, but packets are NOT diverted or re-injected — so there is
+///   essentially no impact on throughput.
+/// * <b>Divert</b> (at least one limit): packets are intercepted at the network
+///   layer, attributed to a process, and released through a per-(process,
+///   direction) <see cref="TokenBucket"/>. Nothing is dropped — packets are only
+///   delayed to honor the configured average rate.
+///
+/// WinDivert filters by port/IP (not by process), so a single handle carries all
+/// TCP/UDP traffic; a pool of pump threads drains it in parallel (Recv/Send are
+/// thread-safe) to spread the work across CPU cores while throttling. The mode
+/// switches automatically as limits are added or cleared, so simply turning the
+/// engine on with no limits does not slow the network down.
 /// </summary>
 public sealed class PacketEngine : IDisposable
 {
+    private const string Filter = "tcp or udp";
+
+    private static readonly IEqualityComparer<(string Process, Direction Direction)> KeyCmp = new ProcessDirectionComparer();
+
     private readonly object _gate = new();
     private readonly ProcessPortMap _portMap = new();
-    private readonly ConcurrentDictionary<string, TokenBucket> _buckets = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, long> _traffic = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<(string Process, Direction Direction), TokenBucket> _buckets = new(KeyCmp);
+    private readonly ConcurrentDictionary<(string Process, Direction Direction), long> _traffic = new(KeyCmp);
+    private readonly List<Thread> _pumps = new();
 
     private volatile IReadOnlyList<ThrottleRule> _rules = Array.Empty<ThrottleRule>();
     private nint _handle = WinDivertNative.InvalidHandle;
-    private Thread? _pump;
     private volatile bool _running;
+    private volatile bool _closing;
+    private bool _diverting;
 
-    /// <summary>Raised when the pump thread terminates because of a native error.</summary>
+    /// <summary>Raised when a pump thread terminates because of a native error.</summary>
     public event Action<Exception>? Faulted;
 
     public bool IsRunning => _running;
 
-    /// <summary>
-    /// Cumulative bytes seen per "process|direction" key for processes that match
-    /// a rule. The UI samples this on a timer and differentiates it into a rate.
-    /// </summary>
-    public IReadOnlyDictionary<string, long> SnapshotTraffic() => new Dictionary<string, long>(_traffic);
+    /// <summary>Cumulative bytes seen per (process, direction). The UI samples this
+    /// on a timer and differentiates it into a live rate.</summary>
+    public IReadOnlyDictionary<(string Process, Direction Direction), long> SnapshotTraffic() =>
+        new Dictionary<(string Process, Direction Direction), long>(_traffic, KeyCmp);
 
-    /// <summary>Builds the dictionary key used by both buckets and traffic counters.</summary>
-    public static string TrafficKey(string process, Direction direction) => BucketKey(process, direction);
-
-    /// <summary>Replace the active rule set. Safe to call while running.</summary>
+    /// <summary>Replace the active rule set. Safe to call while running; switches the
+    /// capture mode between sniff and divert as limits appear or disappear.</summary>
     public void ApplyRules(IEnumerable<ThrottleRule> rules)
     {
         var list = rules.Where(r => r.Enabled).ToList();
@@ -49,6 +63,12 @@ public sealed class PacketEngine : IDisposable
             UpsertBucket(rule.ProcessName, Direction.Inbound, rule.DownloadBytesPerSec);
             UpsertBucket(rule.ProcessName, Direction.Outbound, rule.UploadBytesPerSec);
         }
+
+        lock (_gate)
+        {
+            if (_running && NeedDivert() != _diverting)
+                ReopenPumpLocked(NeedDivert());
+        }
     }
 
     public void Start()
@@ -56,65 +76,128 @@ public sealed class PacketEngine : IDisposable
         lock (_gate)
         {
             if (_running) return;
-
             WinDivertNative.EnsureInitialized();
-
-            // Capture only TCP/UDP over IPv4/IPv6 at the network layer.
-            const string filter = "tcp or udp";
-            _handle = WinDivertNative.WinDivertOpen(filter, WinDivertNative.Layer.Network, 0,
-                WinDivertNative.OpenFlags.None);
-            if (_handle == WinDivertNative.InvalidHandle)
-                throw new InvalidOperationException(
-                    "WinDivertOpen failed. Ensure WinDivert.dll/.sys are present and the app runs as administrator. " +
-                    $"Win32 error {Marshal.GetLastWin32Error()}.");
-
             _running = true;
-            _pump = new Thread(PumpLoop) { IsBackground = true, Name = "NetThrottle.Pump" };
-            _pump.Start();
+            OpenPumpLocked(NeedDivert());
         }
     }
 
     public void Stop()
     {
+        Thread[] pumps;
         lock (_gate)
         {
             if (!_running) return;
             _running = false;
-            if (_handle != WinDivertNative.InvalidHandle)
-            {
-                WinDivertNative.WinDivertClose(_handle);
-                _handle = WinDivertNative.InvalidHandle;
-            }
+            pumps = ClosePumpLocked();
         }
-        _pump?.Join(TimeSpan.FromSeconds(2));
-        _pump = null;
+        JoinAll(pumps);
     }
 
-    private void PumpLoop()
+    private bool NeedDivert()
     {
-        var packet = new byte[65535];
-        var addr = new WinDivertNative.Address();
+        foreach (var rule in _rules)
+            if (rule.DownloadBytesPerSec > 0 || rule.UploadBytesPerSec > 0)
+                return true;
+        return false;
+    }
+
+    private void ReopenPumpLocked(bool divert)
+    {
+        JoinAll(ClosePumpLocked());
         try
         {
-            while (_running)
-            {
-                if (!WinDivertNative.WinDivertRecv(_handle, packet, (uint)packet.Length, out uint len, ref addr))
-                {
-                    if (!_running) break;
-                    continue; // transient; keep pumping
-                }
-
-                ReleasePacket(packet, len, addr);
-            }
+            OpenPumpLocked(divert);
         }
-        catch (Exception ex) when (_running)
+        catch (Exception ex)
         {
             _running = false;
             Faulted?.Invoke(ex);
         }
     }
 
-    private void ReleasePacket(byte[] packet, uint len, WinDivertNative.Address addr)
+    private void OpenPumpLocked(bool divert)
+    {
+        var flags = divert
+            ? WinDivertNative.OpenFlags.None
+            : WinDivertNative.OpenFlags.Sniff | WinDivertNative.OpenFlags.RecvOnly;
+
+        nint handle = WinDivertNative.WinDivertOpen(Filter, WinDivertNative.Layer.Network, 0, flags);
+        if (handle == WinDivertNative.InvalidHandle)
+            throw new InvalidOperationException(
+                "WinDivertOpen failed. Ensure WinDivert.dll/.sys are present and the app runs as administrator. " +
+                $"Win32 error {Marshal.GetLastWin32Error()}.");
+
+        if (divert)
+        {
+            // Bigger queues ride out bursts without dropping while shaping.
+            WinDivertNative.WinDivertSetParam(handle, WinDivertNative.Param.QueueLength, 16384);
+            WinDivertNative.WinDivertSetParam(handle, WinDivertNative.Param.QueueSize, 33554432);
+            WinDivertNative.WinDivertSetParam(handle, WinDivertNative.Param.QueueTime, 2000);
+        }
+
+        _handle = handle;
+        _diverting = divert;
+        _closing = false;
+
+        // One thread is plenty for sniffing; use a small pool to parallelize the
+        // heavier divert path (parse + attribute + re-inject) across cores.
+        int count = divert ? Math.Clamp(Environment.ProcessorCount - 1, 2, 8) : 1;
+        _pumps.Clear();
+        for (int i = 0; i < count; i++)
+        {
+            var thread = new Thread(() => PumpLoop(handle, divert))
+            {
+                IsBackground = true,
+                Name = (divert ? "NetThrottle.Divert." : "NetThrottle.Sniff.") + i,
+            };
+            _pumps.Add(thread);
+            thread.Start();
+        }
+    }
+
+    /// <summary>Closes the handle (unblocking every Recv) and returns the pump threads to join outside the lock.</summary>
+    private Thread[] ClosePumpLocked()
+    {
+        Thread[] pumps = _pumps.ToArray();
+        _pumps.Clear();
+        if (_handle != WinDivertNative.InvalidHandle)
+        {
+            _closing = true;
+            WinDivertNative.WinDivertClose(_handle);
+            _handle = WinDivertNative.InvalidHandle;
+        }
+        return pumps;
+    }
+
+    private static void JoinAll(Thread[]? pumps)
+    {
+        if (pumps is null) return;
+        foreach (var t in pumps)
+            t.Join(TimeSpan.FromSeconds(2));
+    }
+
+    private void PumpLoop(nint handle, bool divert)
+    {
+        var packet = new byte[65535];
+        var addr = new WinDivertNative.Address();
+        try
+        {
+            while (true)
+            {
+                if (!WinDivertNative.WinDivertRecv(handle, packet, (uint)packet.Length, out uint len, ref addr))
+                    break; // handle closed (mode switch / stop) or a fatal error
+                ReleasePacket(packet, len, addr, divert, handle);
+            }
+        }
+        catch (Exception ex) when (_running && !_closing)
+        {
+            _running = false;
+            Faulted?.Invoke(ex);
+        }
+    }
+
+    private void ReleasePacket(byte[] packet, uint len, WinDivertNative.Address addr, bool divert, nint handle)
     {
         TimeSpan delay = TimeSpan.Zero;
 
@@ -126,21 +209,25 @@ public sealed class PacketEngine : IDisposable
 
             if (process is { Length: > 0 })
             {
-                // Count traffic for every process (not just throttled ones) so the
-                // UI can show live throughput for the whole running-process list.
-                _traffic.AddOrUpdate(BucketKey(process, direction), len, (_, v) => v + len);
+                var key = (process, direction);
+                _traffic.AddOrUpdate(key, len, (_, v) => v + len);
 
-                if (FindRule(process, info.Protocol) is { } rule &&
+                if (divert &&
+                    FindRule(process, info.Protocol) is { } rule &&
                     rule.LimitsDirection(direction) &&
-                    _buckets.TryGetValue(BucketKey(process, direction), out var bucket))
+                    _buckets.TryGetValue(key, out var bucket))
                     delay = bucket.Reserve(len);
             }
         }
 
+        // Sniff mode only observes a copy — the real packet was never removed,
+        // so we must not re-inject it.
+        if (!divert) return;
+
         if (delay <= TimeSpan.Zero)
-            SendPacket(packet, len, addr);
+            SendPacket(handle, packet, len, addr);
         else
-            ScheduleSend(packet, len, addr, delay);
+            ScheduleSend(handle, packet, len, addr, delay);
     }
 
     private ThrottleRule? FindRule(string process, ProtocolKind protocol)
@@ -154,33 +241,36 @@ public sealed class PacketEngine : IDisposable
         return null;
     }
 
-    private void ScheduleSend(byte[] packet, uint len, WinDivertNative.Address addr, TimeSpan delay)
+    private void ScheduleSend(nint handle, byte[] packet, uint len, WinDivertNative.Address addr, TimeSpan delay)
     {
-        // Copy: the pump's buffer is reused on the next Recv.
-        var copy = packet.AsSpan(0, (int)len).ToArray();
+        var copy = packet.AsSpan(0, (int)len).ToArray(); // pump buffer is reused on the next Recv
         var addrCopy = addr;
-        _ = Task.Delay(delay).ContinueWith(_ =>
-        {
-            if (_running) SendPacket(copy, len, addrCopy);
-        }, TaskScheduler.Default);
+        _ = Task.Delay(delay).ContinueWith(_ => SendPacket(handle, copy, len, addrCopy), TaskScheduler.Default);
     }
 
-    private void SendPacket(byte[] packet, uint len, WinDivertNative.Address addr)
+    private static void SendPacket(nint handle, byte[] packet, uint len, WinDivertNative.Address addr)
     {
-        if (_handle == WinDivertNative.InvalidHandle) return;
-        WinDivertNative.WinDivertSend(_handle, packet, len, out _, ref addr);
+        if (handle == WinDivertNative.InvalidHandle) return;
+        WinDivertNative.WinDivertSend(handle, packet, len, out _, ref addr);
     }
 
     private void UpsertBucket(string process, Direction direction, long ratePerSec)
     {
         if (string.IsNullOrWhiteSpace(process) || ratePerSec <= 0) return;
-        string key = BucketKey(process, direction);
-        _buckets.AddOrUpdate(key,
+        _buckets.AddOrUpdate((process, direction),
             _ => new TokenBucket(ratePerSec),
             (_, existing) => { existing.UpdateRate(ratePerSec); return existing; });
     }
 
-    private static string BucketKey(string process, Direction direction) => $"{process}|{direction}";
+    /// <summary>Case-insensitive on the process name; allocation-free (no per-packet key string).</summary>
+    private sealed class ProcessDirectionComparer : IEqualityComparer<(string Process, Direction Direction)>
+    {
+        public bool Equals((string Process, Direction Direction) x, (string Process, Direction Direction) y)
+            => x.Direction == y.Direction && string.Equals(x.Process, y.Process, StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode((string Process, Direction Direction) k)
+            => HashCode.Combine(StringComparer.OrdinalIgnoreCase.GetHashCode(k.Process), (int)k.Direction);
+    }
 
     public void Dispose() => Stop();
 }

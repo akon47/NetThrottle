@@ -5,10 +5,12 @@ using System.Security.Principal;
 using NetThrottle.Core.Models;
 using NetThrottle.Engine;
 
-// Headless end-to-end check for the throttling engine.
-// It transfers bulk data over a loopback TCP socket twice — once with the engine
-// off (baseline) and once with a per-process cap applied to THIS process — and
-// compares the measured throughput. Must run elevated (WinDivert loads a driver).
+// Headless end-to-end check for the throttling engine. It transfers bulk data
+// over a loopback TCP socket three ways and compares the throughput:
+//   1. engine OFF              -> baseline
+//   2. engine ON, no limits    -> sniff mode: should stay near baseline
+//   3. engine ON, per-proc cap -> divert mode: should collapse to ~the cap
+// Must run elevated (WinDivert loads a driver).
 
 string logPath = args.Length > 0
     ? args[0]
@@ -53,55 +55,55 @@ if (!hasDll || !hasSys)
     return 3;
 }
 
-// 1) Baseline with the engine OFF.
 double baseline = RunLoopbackTransfer(TransferBytes);
-W($"Baseline throughput (engine OFF): {baseline:0.0} MB/s");
-
-// 2) Same transfer with the engine ON and a cap on THIS process.
-var rule = new ThrottleRule
-{
-    Enabled = true,
-    ProcessName = me,
-    Protocol = ProtocolKind.Both,
-    DownloadBytesPerSec = CapBytesPerSec,
-    UploadBytesPerSec = CapBytesPerSec,
-};
+W($"1) Baseline (engine OFF):            {baseline,7:0.0} MB/s");
 
 using var engine = new PacketEngine();
-engine.ApplyRules(new[] { rule });
 try
 {
-    engine.Start();
+    engine.Start(); // no rules yet -> sniff mode
 }
 catch (Exception ex)
 {
     W($"RESULT: FAIL — engine failed to start: {ex.Message}");
     return 2;
 }
-
-W("Engine started; warming up port→PID map…");
 Thread.Sleep(800);
+double sniff = RunLoopbackTransfer(TransferBytes);
+W($"2) Engine ON, no limits (sniff):     {sniff,7:0.0} MB/s");
 
+engine.ApplyRules(new[]
+{
+    new ThrottleRule
+    {
+        Enabled = true,
+        ProcessName = me,
+        Protocol = ProtocolKind.Both,
+        DownloadBytesPerSec = CapBytesPerSec,
+        UploadBytesPerSec = CapBytesPerSec,
+    },
+}); // a limit appears -> engine switches to divert mode
+Thread.Sleep(800);
 double throttled = RunLoopbackTransfer(TransferBytes);
-W($"Throttled throughput (engine ON, cap {capMBs:0.#} MB/s): {throttled:0.0} MB/s");
+W($"3) Engine ON, {capMBs:0.#} MB/s cap (divert): {throttled,7:0.0} MB/s");
 
 engine.Stop();
-W("Engine stopped.");
 W("");
 
-// Verdict: the capped run must be both far below the baseline and near the cap.
-bool clearlyThrottled = throttled < baseline * 0.25;
-bool nearCap = throttled <= capMBs * 3.0;
-bool pass = clearlyThrottled && nearCap;
+// Loopback runs at multi-GB/s and is purely CPU-bound, so even sniffing's
+// per-packet copy costs measurable CPU here. What matters for the real world is
+// that sniff sustains far more than any physical link (well over 1 Gbps), i.e.
+// the engine is never the bottleneck when no limit is set.
+bool sniffOk = sniff > 200; // MB/s  (~1.6 Gbps of headroom)
+bool throttleOk = throttled < baseline * 0.25 && throttled <= capMBs * 3.0;
+bool pass = sniffOk && throttleOk;
 
-W($"baseline*0.25 = {baseline * 0.25:0.0} MB/s, cap*3 = {capMBs * 3.0:0.0} MB/s");
-W(pass
-    ? $"RESULT: PASS — throttling works. {baseline:0.0} MB/s → {throttled:0.0} MB/s (~{baseline / Math.Max(throttled, 0.01):0}x slower)."
-    : $"RESULT: FAIL — cap not enforced as expected (baseline {baseline:0.0}, throttled {throttled:0.0}).");
+W($"sniff headroom ok ? {sniffOk}   (sniff {sniff:0.0} MB/s, must exceed 200)");
+W($"throttled enforced ? {throttleOk}   (throttled {throttled:0.0}, cap {capMBs:0.#})");
+W(pass ? "RESULT: PASS" : "RESULT: FAIL");
 
 return pass ? 0 : 1;
 
-// Bulk-sends TransferBytes over a fresh loopback TCP connection and returns MB/s.
 static double RunLoopbackTransfer(long bytes)
 {
     var listener = new TcpListener(IPAddress.Loopback, 0);

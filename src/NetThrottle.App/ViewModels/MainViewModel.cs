@@ -29,7 +29,8 @@ public sealed class MainViewModel : ViewModelBase
     private readonly Dictionary<string, RuleViewModel> _rowsByName = new(StringComparer.OrdinalIgnoreCase);
     private readonly LocalizationService _loc = LocalizationService.Instance;
 
-    private IReadOnlyDictionary<string, long> _lastTraffic = new Dictionary<string, long>();
+    private IReadOnlyDictionary<(string Process, Direction Direction), long> _lastTraffic =
+        new Dictionary<(string Process, Direction Direction), long>();
     private long _lastSampleTicks;
     private bool _engineEnabled;
     private string _filter = string.Empty;
@@ -316,7 +317,7 @@ public sealed class MainViewModel : ViewModelBase
     private void SampleTraffic()
     {
         long now = Stopwatch.GetTimestamp();
-        var snapshot = _engine.IsRunning ? _engine.SnapshotTraffic() : new Dictionary<string, long>();
+        var snapshot = _engine.IsRunning ? _engine.SnapshotTraffic() : new Dictionary<(string Process, Direction Direction), long>();
         double elapsed = _lastSampleTicks == 0 ? 1 : (now - _lastSampleTicks) / (double)Stopwatch.Frequency;
         if (elapsed <= 0) elapsed = 1;
 
@@ -345,24 +346,24 @@ public sealed class MainViewModel : ViewModelBase
         _lastSampleTicks = now;
     }
 
-    private void UpdateTotals(IReadOnlyDictionary<string, long> snapshot, double elapsed)
+    private void UpdateTotals(IReadOnlyDictionary<(string Process, Direction Direction), long> snapshot, double elapsed)
     {
         long down = 0, up = 0;
         foreach (var (key, value) in snapshot)
         {
             long delta = value - _lastTraffic.GetValueOrDefault(key);
             if (delta <= 0) continue;
-            if (key.EndsWith("|Inbound", StringComparison.Ordinal)) down += delta;
-            else if (key.EndsWith("|Outbound", StringComparison.Ordinal)) up += delta;
+            if (key.Direction == Direction.Inbound) down += delta;
+            else up += delta;
         }
 
         TotalDownText = ByteFormat.Rate(_engine.IsRunning ? down / elapsed : 0);
         TotalUpText = ByteFormat.Rate(_engine.IsRunning ? up / elapsed : 0);
     }
 
-    private double RateFor(IReadOnlyDictionary<string, long> snapshot, string process, Direction direction, double elapsed)
+    private double RateFor(IReadOnlyDictionary<(string Process, Direction Direction), long> snapshot, string process, Direction direction, double elapsed)
     {
-        string key = PacketEngine.TrafficKey(process, direction);
+        var key = (process, direction);
         long delta = snapshot.GetValueOrDefault(key) - _lastTraffic.GetValueOrDefault(key);
         return delta > 0 ? delta / elapsed : 0;
     }
