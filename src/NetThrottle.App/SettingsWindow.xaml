@@ -51,7 +51,7 @@
 
             <TextBlock Text="{loc:Tr Settings.Display}" FontWeight="SemiBold"
                        Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12" />
-            <CheckBox Content="{loc:Tr Settings.UseMegabytes}" IsChecked="{Binding UseMegabytes}" Margin="0,0,0,4" />
+            <CheckBox Content="{loc:Tr Settings.UseMegabytes}" IsChecked="{Binding UseMegabits}" Margin="0,0,0,4" />
         </StackPanel>
     </DockPanel>
 </ctrl:ThemedWindow>

@@ -23,7 +23,6 @@ public sealed class MainViewModel : ViewModelBase
     private readonly EngineController _engine;
     private readonly ISettingsService _settings;
     private readonly IProcessListProvider _processes;
-    private readonly IUpdateService _updates;
     private readonly DispatcherTimer _statsTimer;
     private readonly DispatcherTimer _refreshTimer;
     private readonly Dictionary<string, RuleViewModel> _rowsByName = new(StringComparer.OrdinalIgnoreCase);
@@ -35,27 +34,20 @@ public sealed class MainViewModel : ViewModelBase
     private bool _engineEnabled;
     private string _filter = string.Empty;
     private bool _showOnlyLimited;
-    private string _totalDownText = "0 B/s";
-    private string _totalUpText = "0 B/s";
-    private bool _isBusy;
-
-    private bool _isUpdateAvailable;
-    private string _updateText = string.Empty;
-    private UpdateCheckResult? _pendingUpdate;
+    private string _totalDownText = "0 bps";
+    private string _totalUpText = "0 bps";
 
     public MainViewModel(
         EngineController engine,
         ISettingsService settings,
-        IProcessListProvider processes,
-        IUpdateService updates)
+        IProcessListProvider processes)
     {
         _engine = engine;
         _settings = settings;
         _processes = processes;
-        _updates = updates;
         _engine.Faulted += OnEngineFaulted;
         _loc.LanguageChanged += OnLanguageChanged;
-        DisplayUnits.Instance.UseMegabytes = _settings.Current.UnitMegabytes;
+        DisplayUnits.Instance.UseMegabits = _settings.Current.UnitMegabytes;
 
         Entries = new ObservableCollection<RuleViewModel>();
         EntriesView = CollectionViewSource.GetDefaultView(Entries);
@@ -70,9 +62,7 @@ public sealed class MainViewModel : ViewModelBase
         ToggleEngineCommand = new RelayCommand(() => ToggleEngine());
         RefreshProcessesCommand = new RelayCommand(RefreshProcesses);
         ClearLimitCommand = new RelayCommand(p => { if (p is RuleViewModel r) ClearLimit(r); });
-        CheckUpdateCommand = new RelayCommand(() => _ = CheckForUpdatesAsync(silent: false));
-        ApplyUpdateCommand = new RelayCommand(() => _ = ApplyUpdateAsync());
-        SkipUpdateCommand = new RelayCommand(SkipUpdate);
+        CheckUpdateCommand = new RelayCommand(() => RequestUpdateCheck?.Invoke());
 
         _statsTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _statsTimer.Tick += (_, _) => SampleTraffic();
@@ -102,11 +92,11 @@ public sealed class MainViewModel : ViewModelBase
     public ICommand RefreshProcessesCommand { get; }
     public ICommand ClearLimitCommand { get; }
     public ICommand CheckUpdateCommand { get; }
-    public ICommand ApplyUpdateCommand { get; }
-    public ICommand SkipUpdateCommand { get; }
 
     public event Action<string>? Notification;
-    public event Action? ShutdownRequested;
+
+    /// <summary>Raised when the user clicks "Check updates"; the host runs the update flow.</summary>
+    public event Action? RequestUpdateCheck;
 
     public bool EngineEnabled
     {
@@ -154,14 +144,14 @@ public sealed class MainViewModel : ViewModelBase
         set { if (SetProperty(ref _showOnlyLimited, value)) EntriesView.Refresh(); }
     }
 
-    /// <summary>Display limits in MB/s instead of KB/s (settings dialog).</summary>
-    public bool UseMegabytes
+    /// <summary>Display limits in Mbps instead of Kbps (settings dialog).</summary>
+    public bool UseMegabits
     {
-        get => DisplayUnits.Instance.UseMegabytes;
+        get => DisplayUnits.Instance.UseMegabits;
         set
         {
-            if (DisplayUnits.Instance.UseMegabytes == value) return;
-            DisplayUnits.Instance.UseMegabytes = value;
+            if (DisplayUnits.Instance.UseMegabits == value) return;
+            DisplayUnits.Instance.UseMegabits = value;
             _settings.Current.UnitMegabytes = value;
             _settings.Save();
             foreach (var row in Entries) row.NotifyUnitChanged();
@@ -201,24 +191,6 @@ public sealed class MainViewModel : ViewModelBase
     {
         get => _totalUpText;
         private set => SetProperty(ref _totalUpText, value);
-    }
-
-    public bool IsBusy
-    {
-        get => _isBusy;
-        private set => SetProperty(ref _isBusy, value);
-    }
-
-    public bool IsUpdateAvailable
-    {
-        get => _isUpdateAvailable;
-        private set => SetProperty(ref _isUpdateAvailable, value);
-    }
-
-    public string UpdateText
-    {
-        get => _updateText;
-        private set => SetProperty(ref _updateText, value);
     }
 
     // --- Process list -------------------------------------------------------
@@ -368,74 +340,6 @@ public sealed class MainViewModel : ViewModelBase
         return delta > 0 ? delta / elapsed : 0;
     }
 
-    // --- Updates ------------------------------------------------------------
-
-    public async Task CheckForUpdatesAsync(bool silent)
-    {
-        try
-        {
-            UpdateCheckResult result = await _updates.CheckAsync().ConfigureAwait(true);
-
-            if (!result.IsUpdateAvailable)
-            {
-                _pendingUpdate = null;
-                IsUpdateAvailable = false;
-                if (!silent) Notification?.Invoke(_loc.Format("Msg.LatestFormat", result.CurrentVersion.ToString(3)));
-                return;
-            }
-
-            if (silent && string.Equals(_settings.Current.SkippedVersion, result.LatestVersion?.ToString(), StringComparison.Ordinal))
-                return;
-
-            _pendingUpdate = result;
-            IsUpdateAvailable = true;
-            UpdateText = _loc.Format("Update.AvailableFormat",
-                result.LatestVersion?.ToString(3) ?? string.Empty, result.CurrentVersion.ToString(3));
-        }
-        catch (Exception ex)
-        {
-            if (!silent) Notification?.Invoke(_loc.Format("Msg.UpdateCheckFailedFormat", ex.Message));
-        }
-    }
-
-    private async Task ApplyUpdateAsync()
-    {
-        if (_pendingUpdate is null) return;
-
-        if (!_updates.CanSelfInstall || _pendingUpdate.SetupAssetUrl is null)
-        {
-            _updates.OpenReleasePage(_pendingUpdate);
-            return;
-        }
-
-        try
-        {
-            IsBusy = true;
-            UpdateText = _loc["Update.Downloading"];
-            var progress = new Progress<double>(p => UpdateText = _loc.Format("Update.DownloadingFormat", p.ToString("P0")));
-            await _updates.DownloadAndLaunchAsync(_pendingUpdate, progress).ConfigureAwait(true);
-            ShutdownRequested?.Invoke();
-        }
-        catch (Exception ex)
-        {
-            Notification?.Invoke(_loc.Format("Msg.UpdateFailedFormat", ex.Message));
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
-
-    private void SkipUpdate()
-    {
-        if (_pendingUpdate?.LatestVersion is { } v)
-        {
-            _settings.Current.SkippedVersion = v.ToString();
-            _settings.Save();
-        }
-        IsUpdateAvailable = false;
-    }
-
     private void OnEngineFaulted(Exception ex)
     {
         System.Windows.Application.Current?.Dispatcher.Invoke(() =>
@@ -451,9 +355,6 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(ToggleButtonText));
         OnPropertyChanged(nameof(CurrentLanguage));
-        if (_pendingUpdate is { } u)
-            UpdateText = _loc.Format("Update.AvailableFormat",
-                u.LatestVersion?.ToString(3) ?? string.Empty, u.CurrentVersion.ToString(3));
     }
 
     public void Shutdown()

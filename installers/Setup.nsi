@@ -37,6 +37,7 @@ InstallDirRegKey HKLM "${PRODUCT_DIR_REGKEY}" ""
 RequestExecutionLevel admin
 ShowInstDetails show
 ShowUnInstDetails show
+BrandingText "${PRODUCT_NAME} ${VERSION}"
 
 VIProductVersion "${VERSION}.0"
 VIAddVersionKey "ProductName" "${PRODUCT_NAME}"
@@ -49,6 +50,13 @@ VIAddVersionKey "FileDescription" "${PRODUCT_NAME} Setup"
 Var NeedUninstall
 
 !define MUI_ABORTWARNING
+!define MUI_ICON "..\src\NetThrottle.App\icon.ico"
+!define MUI_UNICON "..\src\NetThrottle.App\icon.ico"
+!define MUI_WELCOMEFINISHPAGE_BITMAP "welcome.bmp"
+!define MUI_WELCOMEFINISHPAGE_BITMAP_NOSTRETCH
+!define MUI_UNWELCOMEFINISHPAGE_BITMAP "welcome.bmp"
+!define MUI_WELCOMEPAGE_TITLE "$(WelcomeTitle)"
+!define MUI_WELCOMEPAGE_TEXT "$(WelcomeText)"
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
@@ -60,6 +68,11 @@ Var NeedUninstall
 
 !insertmacro MUI_LANGUAGE "English"
 !insertmacro MUI_LANGUAGE "Korean"
+
+LangString WelcomeTitle ${LANG_ENGLISH} "NetThrottle Setup"
+LangString WelcomeTitle ${LANG_KOREAN}  "NetThrottle 설치"
+LangString WelcomeText  ${LANG_ENGLISH} "Per-process network bandwidth limiter for Windows (TCP/UDP, separate upload/download caps).$\r$\n$\r$\nClick Next to continue."
+LangString WelcomeText  ${LANG_KOREAN}  "Windows용 프로세스별 네트워크 대역폭 제한기 (TCP/UDP, 업/다운 개별 제한).$\r$\n$\r$\n계속하려면 '다음'을 누르세요."
 
 Function .onInit
   ${IfNot} ${RunningX64}
@@ -81,6 +94,12 @@ Function .onInit
     nsExec::Exec '"$SYSDIR\taskkill.exe" /F /IM ${APP_EXE} /T'
     Sleep 800
   app_wait_done:
+
+  ; Unload the WinDivert driver so WinDivert64.sys is no longer in use and can be
+  ; replaced (the self-update case the user hit). The app re-installs it on demand.
+  nsExec::Exec '"$SYSDIR\sc.exe" stop WinDivert'
+  nsExec::Exec '"$SYSDIR\sc.exe" delete WinDivert'
+  Sleep 600
 
   ; Offer to remove a previous version first.
   ReadRegStr $0 ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "UninstallString"

@@ -71,18 +71,6 @@
             </DockPanel>
         </Border>
 
-        <!-- Update banner -->
-        <Border DockPanel.Dock="Top" Background="#FF332B00" BorderBrush="#FF5A4A00" BorderThickness="0,0,0,1"
-                Padding="12,8" Visibility="{Binding IsUpdateAvailable, Converter={conv:BoolToVisibilityConverter}}">
-            <DockPanel>
-                <TextBlock Text="{Binding UpdateText}" VerticalAlignment="Center" Foreground="{StaticResource AmberBrush}" />
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
-                    <Button Content="{loc:Tr Update.Now}" Command="{Binding ApplyUpdateCommand}" Margin="6,0" />
-                    <Button Content="{loc:Tr Update.Skip}" Command="{Binding SkipUpdateCommand}" Margin="6,0" />
-                </StackPanel>
-            </DockPanel>
-        </Border>
-
         <!-- Status bar -->
         <Border DockPanel.Dock="Bottom" Background="{StaticResource PanelBackgroundBrush}"
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="12,6">

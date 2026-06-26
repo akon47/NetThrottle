@@ -15,12 +15,12 @@ public interface IUpdateService
     /// <summary>Queries GitHub for the latest release and compares it to the running version.</summary>
     Task<UpdateCheckResult> CheckAsync(CancellationToken ct = default);
 
-    /// <summary>
-    /// Downloads the Setup.exe asset, launches it elevated, and requests app
-    /// shutdown. Only valid when <see cref="CanSelfInstall"/> is true and the
-    /// result carries a setup asset URL.
-    /// </summary>
-    Task DownloadAndLaunchAsync(UpdateCheckResult update, IProgress<double>? progress, CancellationToken ct = default);
+    /// <summary>Downloads the Setup.exe asset to a temp file and returns its path.
+    /// Progress is reported as a fraction 0–1.</summary>
+    Task<string> DownloadAsync(UpdateCheckResult update, IProgress<double>? progress, CancellationToken ct = default);
+
+    /// <summary>Launches the downloaded installer elevated. The caller should exit afterwards.</summary>
+    void RunInstaller(string path);
 
     /// <summary>Opens the release page in the default browser (portable fallback).</summary>
     void OpenReleasePage(UpdateCheckResult update);
@@ -75,21 +75,24 @@ public sealed class GitHubUpdateService : IUpdateService
         };
     }
 
-    public async Task DownloadAndLaunchAsync(UpdateCheckResult update, IProgress<double>? progress, CancellationToken ct = default)
+    public async Task<string> DownloadAsync(UpdateCheckResult update, IProgress<double>? progress, CancellationToken ct = default)
     {
-        if (!CanSelfInstall || update.SetupAssetUrl is null)
-            throw new InvalidOperationException("This build cannot self-install. Use OpenReleasePage instead.");
+        if (update.SetupAssetUrl is null)
+            throw new InvalidOperationException("The release has no installer asset.");
 
         string fileName = update.SetupAssetName ?? $"NetThrottle_{update.Tag}_Setup.exe";
         string target = Path.Combine(Path.GetTempPath(), fileName);
-
         await DownloadToFileAsync(update.SetupAssetUrl, target, progress, ct).ConfigureAwait(false);
+        return target;
+    }
 
-        // Launch the installer elevated; it will wait for this process to exit
-        // (mutex handshake in the NSIS script) before replacing files.
+    public void RunInstaller(string path)
+    {
+        // Elevated; the NSIS script waits for this app to exit (mutex handshake)
+        // and stops the WinDivert driver before replacing files.
         Process.Start(new ProcessStartInfo
         {
-            FileName = target,
+            FileName = path,
             UseShellExecute = true,
             Verb = "runas",
         });

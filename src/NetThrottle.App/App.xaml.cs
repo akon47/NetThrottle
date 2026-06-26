@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Imaging;
 using H.NotifyIcon;
+using NetThrottle.App.Dialogs;
 using NetThrottle.App.Localization;
 using NetThrottle.App.Services;
 using NetThrottle.App.ViewModels;
@@ -24,6 +25,7 @@ public partial class App : Application
     private EngineController? _engine;
     private MainViewModel? _viewModel;
     private SettingsService? _settings;
+    private GitHubUpdateService? _updates;
     private TaskbarIcon? _tray;
     private bool _exiting;
     private bool _trayHintShown;
@@ -51,15 +53,15 @@ public partial class App : Application
         LocalizationService.Instance.Initialize(
             Path.Combine(AppContext.BaseDirectory, "locales"), settings.Current.Language);
         var processes = new ProcessListProvider();
-        var updates = new GitHubUpdateService();
+        _updates = new GitHubUpdateService();
 
-        _viewModel = new MainViewModel(_engine, settings, processes, updates);
+        _viewModel = new MainViewModel(_engine, settings, processes);
 
         var window = new MainWindow { DataContext = _viewModel };
         window.Closing += OnWindowClosing;
         _viewModel.Notification += message => window.Dispatcher.Invoke(() =>
-            MessageBox.Show(window, message, "NetThrottle", MessageBoxButton.OK, MessageBoxImage.Information));
-        _viewModel.ShutdownRequested += () => window.Dispatcher.Invoke(ExitApplication);
+            StyledMessageBox.Info(window, "NetThrottle", message));
+        _viewModel.RequestUpdateCheck += () => window.Dispatcher.Invoke(() => _ = CheckForUpdatesAsync(manual: true));
         MainWindow = window;
         RestoreWindowPlacement(window, settings.Current);
 
@@ -67,7 +69,68 @@ public partial class App : Application
         if (!settings.Current.StartMinimized)
             window.Show();
 
-        _ = _viewModel.CheckForUpdatesAsync(silent: true);
+        _ = CheckForUpdatesAsync(manual: false);
+    }
+
+    private async Task CheckForUpdatesAsync(bool manual)
+    {
+        var loc = LocalizationService.Instance;
+        var owner = MainWindow;
+        if (_updates is not { } updates) return;
+
+        try
+        {
+            UpdateCheckResult result = await updates.CheckAsync();
+            if (!result.IsUpdateAvailable)
+            {
+                if (manual) StyledMessageBox.Info(owner, loc["Update.Title"], loc["Update.None"]);
+                return;
+            }
+
+            string version = "v" + (result.LatestVersion?.ToString(3) ?? result.Tag?.TrimStart('v', 'V') ?? string.Empty);
+
+            // Portable build: no in-place install — offer the download page.
+            if (!updates.CanSelfInstall || result.SetupAssetUrl is null)
+            {
+                if (StyledMessageBox.Confirm(owner, loc["Update.Title"], loc.Format("Update.PortableConfirmFormat", version)))
+                    updates.OpenReleasePage(result);
+                return;
+            }
+
+            if (!StyledMessageBox.Confirm(owner, loc["Update.Title"], loc.Format("Update.ConfirmFormat", version)))
+                return;
+
+            var progressDialog = new ProgressDialog(loc["Update.Title"], loc.Format("Update.DownloadingStatusFormat", version));
+            if (owner is { IsVisible: true }) progressDialog.Owner = owner;
+            else progressDialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            progressDialog.Show();
+
+            try
+            {
+                var progress = new Progress<double>(p => progressDialog.Report(p * 100));
+                string installer = await updates.DownloadAsync(result, progress, progressDialog.Token);
+                if (progressDialog.IsVisible) progressDialog.Close();
+
+                // Release the WinDivert driver (close its handle) so the installer
+                // can replace WinDivert64.sys, then launch it and exit.
+                _engine?.Stop();
+                updates.RunInstaller(installer);
+                ExitApplication();
+            }
+            catch (OperationCanceledException)
+            {
+                if (progressDialog.IsVisible) progressDialog.Close();
+            }
+            catch (Exception ex)
+            {
+                if (progressDialog.IsVisible) progressDialog.Close();
+                StyledMessageBox.Error(owner, loc["Update.Title"], ex.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            if (manual) StyledMessageBox.Error(owner, loc["Update.Title"], ex.Message);
+        }
     }
 
     private static void RestoreWindowPlacement(Window window, NetThrottle.Core.Settings.AppSettings s)
